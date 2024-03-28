@@ -188,6 +188,7 @@ float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 b
 bool BVH::setup_3ddda(const Ray& ray, DDAState& state, Box& box)
 {
     // if ray is not inside the world: advance until it is
+
     state.t = 0;
     if (!box.contains(ray.O))
     {
@@ -197,35 +198,35 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, Box& box)
     }
 
     // setup amanatides & woo - assume world is 1x1x1, from (0,0,0) to (1,1,1)
-    //const float cellSize = 1.0f / box.size;
-    //state.step = make_int3(1 - ray.Dsign * 2);
-    //const float3 posInGrid = box.size * (ray.O + (state.t + 0.00005f) * ray.D);
-    //const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
-    //const int3 P = clamp(make_int3(posInGrid), 0, box.size - 1);
-    //state.X = P.x, state.Y = P.y, state.Z = P.z;
-    //state.tdelta = cellSize * float3(state.step) * ray.rD;
-    //state.tmax = (gridPlanes - ray.O) * ray.rD;
-    //// proceed with traversal
-    //return true;
-
-    // expressed in world space
-    const float3 voxelMinBounds = box.min;
-    const float3 voxelMaxBounds = box.max;
-
-    /*const float3 voxelMinBounds = TransformPosition(box.min, box.model.matrix());
-    const float3 voxelMaxBounds = TransformPosition(box.max, box.model.matrix());*/
-
-    const float gridsizeFloat = static_cast<float>(box.size);
-    const float cellSize = 1.0f / gridsizeFloat;
+    const float cellSize = 1.0f / box.size;
     state.step = make_int3(1 - ray.Dsign * 2);
-    // based on our cube position
-    const float3 posInGrid = gridsizeFloat * ((ray.O - voxelMinBounds) + (state.t + 0.00005f) * ray.D) / voxelMaxBounds;
+    const float3 posInGrid = box.size * (ray.O + (state.t + 0.00005f) * ray.D);
     const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
     const int3 P = clamp(make_int3(posInGrid), 0, box.size - 1);
     state.X = P.x, state.Y = P.y, state.Z = P.z;
     state.tdelta = cellSize * float3(state.step) * ray.rD;
-    state.tmax = ((gridPlanes * voxelMaxBounds) - (ray.O - voxelMinBounds)) * ray.rD;
+    state.tmax = (gridPlanes - ray.O) * ray.rD;
+    // proceed with traversal
     return true;
+
+    //// expressed in world space
+    //const float3 voxelMinBounds = box.min;
+    //const float3 voxelMaxBounds = box.max;
+
+    ///*const float3 voxelMinBounds = TransformPosition(box.min, box.model.matrix());
+    //const float3 voxelMaxBounds = TransformPosition(box.max, box.model.matrix());*/
+
+    //const float gridsizeFloat = static_cast<float>(box.size);
+    //const float cellSize = 1.0f / gridsizeFloat;
+    //state.step = make_int3(1 - ray.Dsign * 2);
+    //// based on our cube position
+    //const float3 posInGrid = gridsizeFloat * ((ray.O - voxelMinBounds) + (state.t + 0.00005f) * ray.D) / voxelMaxBounds;
+    //const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
+    //const int3 P = clamp(make_int3(posInGrid), 0, box.size - 1);
+    //state.X = P.x, state.Y = P.y, state.Z = P.z;
+    //state.tdelta = cellSize * float3(state.step) * ray.rD;
+    //state.tmax = ((gridPlanes * voxelMaxBounds) - (ray.O - voxelMinBounds)) * ray.rD;
+    //return true;
 }
 
 void BVH::find_nearest(Ray& ray, Box& box)
@@ -235,19 +236,25 @@ void BVH::find_nearest(Ray& ray, Box& box)
 
     mat4 model_mat = box.model.matrix();
     mat4 inv_model_mat = model_mat.Inverted();
+    
+
+    // Setup Amanatides & Woo Grid Traversal
+	DDAState s;
+    if (!setup_3ddda(ray, s, box))
+    {
+        // Restore the original ray's transform
+        ray.O = initial_ray.O;
+        ray.D = initial_ray.D;
+        ray.rD = initial_ray.rD;
+        ray.Dsign = initial_ray.Dsign;
+        return;
+    }
 
     // Transform the Ray
     ray.O = TransformPosition(ray.O, inv_model_mat);
     ray.D = TransformVector(ray.D, inv_model_mat);
     ray.rD = float3(1.0f / ray.D.x, 1.0f / ray.D.y, 1.0f / ray.D.z);
     ray.CalculateDsign();
-
-    // Setup Amanatides & Woo Grid Traversal
-	DDAState s;
-    if (!setup_3ddda(ray, s, box))
-    {
-        return;
-    }
 
 	// Start Stepping
 	while (s.t <= ray.t)
@@ -366,10 +373,14 @@ void BVHNode::subdivide(uint node_idx, Box* voxel_objects, BVHNode* pool, uint p
     subdivide(rightChildIdx, voxel_objects, pool, pool_ptr, indices, nodes_used);
 }
 
-void Box::populate_grid()
+void Box::populate_grid(bool box_or_lightsaber)
 {
     /* Load the model file */
-    FILE* file = fopen("assets/lightsaber.vox", "rb");
+    FILE* file;
+    if (box_or_lightsaber)
+        file = fopen("assets/crate-16.vox", "rb");
+    else
+        file = fopen("assets/lightsaber.vox", "rb");
     uint32_t buffer_size = _filelength(_fileno(file));
     uint8_t* buffer = new uint8_t[buffer_size];
     fread(buffer, buffer_size, 1, file);

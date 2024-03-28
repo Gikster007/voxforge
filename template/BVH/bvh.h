@@ -15,7 +15,7 @@ struct alignas(32) Box
         // test if pos is inside the cube
         return pos.x >= min.x && pos.y >= min.y && pos.z >= min.z && pos.x <= max.x && pos.y <= max.y && pos.z <= max.z;
     }
-    void populate_grid();
+    void populate_grid(bool box_or_lightsaber);
 };
 
 struct BVHNode

@@ -21,12 +21,12 @@ void Renderer::Init()
     voxel_objects = new Box[N];
     float3 pos = RandomFloat();
 
-    voxel_objects[0].populate_grid();
+    voxel_objects[0].populate_grid(false);
 
     for (int i = 1; i < N; i++)
     {
-        voxel_objects[i].populate_grid();
-        voxel_objects[i].model.translation = float3(i, 0.0f, 0.0f);
+        voxel_objects[i].populate_grid(false);
+        voxel_objects[i].model.translation = float3(0.0f, 0.0f, i);
         voxel_objects[i].min = TransformPosition(voxel_objects[i].min, voxel_objects[i].model.matrix());
         voxel_objects[i].max = TransformPosition(voxel_objects[i].max, voxel_objects[i].model.matrix());
     }
