@@ -2,7 +2,7 @@
 
 constexpr int N = 4; // Amount of Voxel Models in the game
 
-struct alignas(32) Box
+struct alignas(32) VoxelVolume
 {
     float3 min = 0.0f, max = 1.0f;
     uint8_t* grid;
@@ -20,7 +20,7 @@ struct alignas(32) Box
 
 struct BVHNode
 {
-    void subdivide(uint node_idx, Box* voxel_objects, BVHNode* pool, uint pool_ptr, uint* indices, uint& nodes_used);
+    void subdivide(uint node_idx, VoxelVolume* voxel_objects, BVHNode* pool, uint pool_ptr, uint* indices, uint& nodes_used);
     bool is_leaf() const { return count > 0; }
 
 #if AMD_CPU
@@ -49,18 +49,18 @@ struct BVHNode
 class BVH
 {
   public:
-    void construct_bvh(Box* voxel_objects);
+    void construct_bvh(VoxelVolume* voxel_objects);
 
-    void intersect_bvh(Box* voxel_objects, Ray& ray, const uint node_idx);
-    void intersect_voxel(Ray& ray, Box& box);
+    void intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx);
+    void intersect_voxel_volume(Ray& ray, VoxelVolume& box);
 #if AMD_CPU
     float intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax);
 #else
     float intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 bmax4);
 #endif
 
-    bool setup_3ddda(const Ray& ray, DDAState& state, Box& box);
-    void find_nearest(Ray& ray, Box& box);
+    bool setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box);
+    void find_nearest(Ray& ray, VoxelVolume& box);
 
     uint* indices;
     BVHNode* pool;

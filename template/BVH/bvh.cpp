@@ -5,7 +5,7 @@
 #define OGT_VOX_IMPLEMENTATION
 #include "lib/ogt_vox.h"
 
-void calculate_bounds(Box* voxel_objects, uint node_idx, BVHNode* pool, uint* indices)
+void calculate_bounds(VoxelVolume* voxel_objects, uint node_idx, BVHNode* pool, uint* indices)
 {
     BVHNode& node = pool[node_idx];
     node.min = float3(1e30f);
@@ -14,7 +14,7 @@ void calculate_bounds(Box* voxel_objects, uint node_idx, BVHNode* pool, uint* in
     for (uint first = node.left_first, i = 0; i < node.count; i++)
     {
         uint idx = indices[first + i];
-        Box& leaf = voxel_objects[idx];
+        VoxelVolume& leaf = voxel_objects[idx];
         node.min = fminf(node.min, leaf.min);
         node.max = fmaxf(node.max, leaf.max);
         //node.min = fminf(node.min, TransformPosition(leaf.min, leaf.model.matrix()));
@@ -22,7 +22,7 @@ void calculate_bounds(Box* voxel_objects, uint node_idx, BVHNode* pool, uint* in
     }
 }
 
-void BVH::construct_bvh(Box* voxel_objects)
+void BVH::construct_bvh(VoxelVolume* voxel_objects)
 {
     // Create Index Array
     indices = new uint[/*N * N * N*/ N];
@@ -41,34 +41,8 @@ void BVH::construct_bvh(Box* voxel_objects)
     root->subdivide(root->left_first, voxel_objects, pool, pool_ptr, indices, nodes_used);
 }
 
-void BVH::intersect_voxel(Ray& ray, Box& box)
+void BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
 {
-//    float3 b[2] = {box.min, box.max};
-//    // test if the ray intersects the box
-//    const int signx = ray.D.x < 0, signy = ray.D.y < 0, signz = ray.D.z < 0;
-//    float tmin = (b[signx].x - ray.O.x) * ray.rD.x;
-//    float tmax = (b[1 - signx].x - ray.O.x) * ray.rD.x;
-//    const float tymin = (b[signy].y - ray.O.y) * ray.rD.y;
-//    const float tymax = (b[1 - signy].y - ray.O.y) * ray.rD.y;
-//    if (tmin > tymax || tymin > tmax)
-//        goto miss;
-//    tmin = max(tmin, tymin), tmax = min(tmax, tymax);
-//    const float tzmin = (b[signz].z - ray.O.z) * ray.rD.z;
-//    const float tzmax = (b[1 - signz].z - ray.O.z) * ray.rD.z;
-//    if (tmin > tzmax || tzmin > tmax)
-//        goto miss;
-//    if ((tmin = max(tmin, tzmin)) > 0)
-//        if (ray.t < tmin)
-//            goto miss;
-//        else
-//        {
-//            //ray.t = tmin;
-//            find_nearest(ray, box);
-//        }
-//
-//miss:
-//    /*ray.t = 1e34f*/ return;
-
     float tmin = 0.0f, tmax = 1e34f;
     float3 corners[2] = {box.min, box.max};
 
@@ -87,11 +61,10 @@ void BVH::intersect_voxel(Ray& ray, Box& box)
         if (tmax < tmin)
             return;
     }
-
     find_nearest(ray, box);
 }
 
-void BVH::intersect_bvh(Box* voxel_objects, Ray& ray, const uint node_idx)
+void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx)
 {
     BVHNode* node = &pool[node_idx], *stack[64];
     uint stack_ptr = 0;
@@ -103,7 +76,7 @@ void BVH::intersect_bvh(Box* voxel_objects, Ray& ray, const uint node_idx)
         if (node->is_leaf())
         {
             for (uint i = 0; i < node->count; i++)
-                intersect_voxel(ray, voxel_objects[indices[node->left_first + i]]);
+                intersect_voxel_volume(ray, voxel_objects[indices[node->left_first + i]]);
             if (stack_ptr == 0)
                 break;
             else
@@ -185,7 +158,7 @@ float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 b
 }
 #endif
 
-bool BVH::setup_3ddda(const Ray& ray, DDAState& state, Box& box)
+bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 {
     // if ray is not inside the world: advance until it is
 
@@ -197,39 +170,27 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, Box& box)
             return false; // ray misses voxel data entirely
     }
 
-    // setup amanatides & woo - assume world is 1x1x1, from (0,0,0) to (1,1,1)
-    const float cellSize = 1.0f / box.size;
+    // expressed in world space
+    const float3 voxelMinBounds = box.min;
+    const float3 voxelMaxBounds = box.max;
+
+    /*const float3 voxelMinBounds = TransformPosition(box.min, box.model.matrix());
+    const float3 voxelMaxBounds = TransformPosition(box.max, box.model.matrix());*/
+
+    const float gridsizeFloat = static_cast<float>(box.size);
+    const float cellSize = 1.0f / gridsizeFloat;
     state.step = make_int3(1 - ray.Dsign * 2);
-    const float3 posInGrid = box.size * (ray.O + (state.t + 0.00005f) * ray.D);
+    // based on our cube position
+    const float3 posInGrid = gridsizeFloat * ((ray.O - voxelMinBounds) + (state.t + 0.00005f) * ray.D) / voxelMaxBounds;
     const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
     const int3 P = clamp(make_int3(posInGrid), 0, box.size - 1);
     state.X = P.x, state.Y = P.y, state.Z = P.z;
     state.tdelta = cellSize * float3(state.step) * ray.rD;
-    state.tmax = (gridPlanes - ray.O) * ray.rD;
-    // proceed with traversal
+    state.tmax = ((gridPlanes * voxelMaxBounds) - (ray.O - voxelMinBounds)) * ray.rD;
     return true;
-
-    //// expressed in world space
-    //const float3 voxelMinBounds = box.min;
-    //const float3 voxelMaxBounds = box.max;
-
-    ///*const float3 voxelMinBounds = TransformPosition(box.min, box.model.matrix());
-    //const float3 voxelMaxBounds = TransformPosition(box.max, box.model.matrix());*/
-
-    //const float gridsizeFloat = static_cast<float>(box.size);
-    //const float cellSize = 1.0f / gridsizeFloat;
-    //state.step = make_int3(1 - ray.Dsign * 2);
-    //// based on our cube position
-    //const float3 posInGrid = gridsizeFloat * ((ray.O - voxelMinBounds) + (state.t + 0.00005f) * ray.D) / voxelMaxBounds;
-    //const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
-    //const int3 P = clamp(make_int3(posInGrid), 0, box.size - 1);
-    //state.X = P.x, state.Y = P.y, state.Z = P.z;
-    //state.tdelta = cellSize * float3(state.step) * ray.rD;
-    //state.tmax = ((gridPlanes * voxelMaxBounds) - (ray.O - voxelMinBounds)) * ray.rD;
-    //return true;
 }
 
-void BVH::find_nearest(Ray& ray, Box& box)
+void BVH::find_nearest(Ray& ray, VoxelVolume& box)
 {
     // Save Initial Ray
     Ray initial_ray = ray;
@@ -237,24 +198,16 @@ void BVH::find_nearest(Ray& ray, Box& box)
     mat4 model_mat = box.model.matrix();
     mat4 inv_model_mat = model_mat.Inverted();
     
-
-    // Setup Amanatides & Woo Grid Traversal
-	DDAState s;
-    if (!setup_3ddda(ray, s, box))
-    {
-        // Restore the original ray's transform
-        ray.O = initial_ray.O;
-        ray.D = initial_ray.D;
-        ray.rD = initial_ray.rD;
-        ray.Dsign = initial_ray.Dsign;
-        return;
-    }
-
     // Transform the Ray
     ray.O = TransformPosition(ray.O, inv_model_mat);
     ray.D = TransformVector(ray.D, inv_model_mat);
     ray.rD = float3(1.0f / ray.D.x, 1.0f / ray.D.y, 1.0f / ray.D.z);
     ray.CalculateDsign();
+
+    // Setup Amanatides & Woo Grid Traversal
+	DDAState s;
+    if (!setup_3ddda(ray, s, box))
+        return;
 
 	// Start Stepping
 	while (s.t <= ray.t)
@@ -290,13 +243,13 @@ void BVH::find_nearest(Ray& ray, Box& box)
     ray.Dsign = initial_ray.Dsign;
 }
 
-float evaluate_sah(Box* voxel_objects, uint* indices, BVHNode& node, int axis, float pos)
+float evaluate_sah(VoxelVolume* voxel_objects, uint* indices, BVHNode& node, int axis, float pos)
 {
     aabb left_box, right_box;
     int left_count = 0, right_count = 0;
     for (uint i = 0; i < node.count; i++)
     {
-        Box& box = voxel_objects[indices[node.left_first + i]];
+        VoxelVolume& box = voxel_objects[indices[node.left_first + i]];
         if (box.get_center()[axis] < pos)
         {
             left_count++;
@@ -314,7 +267,7 @@ float evaluate_sah(Box* voxel_objects, uint* indices, BVHNode& node, int axis, f
     return cost > 0 ? cost : 1e34f;
 }
 
-void BVHNode::subdivide(uint node_idx, Box* voxel_objects, BVHNode* pool, uint pool_ptr, uint* indices, uint& nodes_used)
+void BVHNode::subdivide(uint node_idx, VoxelVolume* voxel_objects, BVHNode* pool, uint pool_ptr, uint* indices, uint& nodes_used)
 {
     BVHNode& node = pool[node_idx];
 
@@ -326,7 +279,7 @@ void BVHNode::subdivide(uint node_idx, Box* voxel_objects, BVHNode* pool, uint p
     {
         for (uint i = 0; i < node.count; i++)
         {
-            Box& box = voxel_objects[indices[node.left_first + i]];
+            VoxelVolume& box = voxel_objects[indices[node.left_first + i]];
             float candidate_pos = box.get_center()[axis];
             float cost = evaluate_sah(voxel_objects, indices, node, axis, candidate_pos);
             if (cost < best_cost)
@@ -373,7 +326,7 @@ void BVHNode::subdivide(uint node_idx, Box* voxel_objects, BVHNode* pool, uint p
     subdivide(rightChildIdx, voxel_objects, pool, pool_ptr, indices, nodes_used);
 }
 
-void Box::populate_grid(bool box_or_lightsaber)
+void VoxelVolume::populate_grid(bool box_or_lightsaber)
 {
     /* Load the model file */
     FILE* file;

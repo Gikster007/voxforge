@@ -18,7 +18,7 @@ void Renderer::Init()
         fclose(f);
     }
 
-    voxel_objects = new Box[N];
+    voxel_objects = new VoxelVolume[N];
     float3 pos = RandomFloat();
 
     voxel_objects[0].populate_grid(false);
