@@ -161,7 +161,6 @@ float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 b
 bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 {
     // if ray is not inside the world: advance until it is
-
     state.t = 0;
     if (!box.contains(ray.O))
     {
@@ -172,7 +171,7 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 
     // expressed in world space
     const float3 voxelMinBounds = box.min;
-    const float3 voxelMaxBounds = box.max;
+    const float3 voxelMaxBounds = box.max /*- box.min*/;
 
     /*const float3 voxelMinBounds = TransformPosition(box.min, box.model.matrix());
     const float3 voxelMaxBounds = TransformPosition(box.max, box.model.matrix());*/
