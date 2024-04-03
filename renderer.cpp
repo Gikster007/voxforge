@@ -18,18 +18,31 @@ void Renderer::Init()
         fclose(f);
     }
 
-    voxel_objects = new Box[N];
-    voxel_objects[0].populate_grid();
+    voxel_objects = new Box[N * N * N];
+    //voxel_objects[0].populate_grid();
 
-    for (int i = 1; i < N; i++)
+    //for (int i = 1; i < N; i++)
+    //{
+    //    voxel_objects[i].populate_grid();
+    //    voxel_objects[i].model.translation = float3(0.0f, 0.0f, i);
+    //    voxel_objects[i].min = TransformPosition(voxel_objects[i].min, voxel_objects[i].model.matrix());
+    //    voxel_objects[i].max = TransformPosition(voxel_objects[i].max, voxel_objects[i].model.matrix());
+
+    //    /*voxel_objects[i].min = RandomFloat();
+    //    voxel_objects[i].max = voxel_objects[i].min + 1.0f;*/
+    //}
+
+    for (int z = 0; z < N; z++)
     {
-        voxel_objects[i].populate_grid();
-        voxel_objects[i].model.translation = float3(0.0f, 0.0f, i);
-        voxel_objects[i].min = TransformPosition(voxel_objects[i].min, voxel_objects[i].model.matrix());
-        voxel_objects[i].max = TransformPosition(voxel_objects[i].max, voxel_objects[i].model.matrix());
-
-        /*voxel_objects[i].min = RandomFloat();
-        voxel_objects[i].max = voxel_objects[i].min + 1.0f;*/
+        for (int y = 0; y < N; y++)
+        {
+            for (int x = 0; x < N; x++)
+            {
+                voxel_objects[x + y * N + z * N * N].min = float3(x * 2.0f, y * 2.0f, z * 2.0f);
+                voxel_objects[x + y * N + z * N * N].max = voxel_objects[x + y * N + z * N * N].min + 1.0f;
+                //voxel_objects[x + y * N + z * N * N].populate_grid();
+            }
+        }
     }
 
     bvh.construct_bvh(voxel_objects);
@@ -393,7 +406,7 @@ void Renderer::Tick(float deltaTime)
 
             bvh.intersect_bvh(voxel_objects, r, 0);
 
-            if (/*r.t < 1e34f */ r.voxel != 0)
+            if (r.t < 1e34f  /*r.voxel != 0*/)
             {
                 screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(1.0f, 1.0f, 1.0f, 0.0f));
             }

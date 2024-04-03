@@ -60,9 +60,9 @@ void BVH::intersect_voxel(Ray& ray, Box& box)
             goto miss;
         else
         {
-            //ray.t = tmin;
+            ray.t = tmin;
             ray.steps++;
-            find_nearest(ray, box);
+            //find_nearest(ray, box);
             return;
         }
 miss:
