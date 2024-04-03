@@ -85,8 +85,7 @@ public:
         uint xsign = *(uint*)&D.x >> 31;
         uint ysign = *(uint*)&D.y >> 31;
         uint zsign = *(uint*)&D.z >> 31;
-
-        Dsign = (float3((float)xsign * 2.0f - 1.0f, (float)ysign * 2.0f - 1.0f, (float)zsign * 2.0f - 1.0f) + 1) * 0.5f;
+        Dsign = (float3((float)xsign * 2 - 1, (float)ysign * 2 - 1, (float)zsign * 2 - 1) + 1) * 0.5f;
 	}
 	
 	float GetReflectivity( const float3& I ) const; // TODO: implement

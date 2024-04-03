@@ -40,11 +40,12 @@ struct alignas(32) Box
         // test if pos is inside the cube
         return pos.x >= aabb.min.x && pos.y >= aabb.min.y && pos.z >= aabb.min.z && pos.x <= aabb.max.x && pos.y <= aabb.max.y && pos.z <= aabb.max.z;
     }
-    void populate_grid();
+    void populate_grid(bool box_or_lightsaber);
 };
 
 struct BVHNode
 {
+    void subdivide(uint node_idx, VoxelVolume* voxel_objects, BVHNode* pool, uint pool_ptr, uint* indices, uint& nodes_used);
     bool is_leaf() const { return count > 0; }
 
 #if AMD_CPU
@@ -73,7 +74,7 @@ struct BVHNode
 class BVH
 {
   public:
-    void construct_bvh(Box* voxel_objects);
+    void construct_bvh(VoxelVolume* voxel_objects);
 
     void intersect_bvh(Box* voxel_objects, Ray& ray, const uint node_idx);
 
@@ -85,8 +86,8 @@ class BVH
     float intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 bmax4);
 #endif
 
-    bool setup_3ddda(const Ray& ray, DDAState& state, Box& box);
-    void find_nearest(Ray& ray, Box& box);
+    bool setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box);
+    void find_nearest(Ray& ray, VoxelVolume& box);
 
     float find_best_split_plane(Box* voxel_objects, BVHNode& node, int& axis, float& pos) const;
 

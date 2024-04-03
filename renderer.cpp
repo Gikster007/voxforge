@@ -18,7 +18,7 @@ void Renderer::Init()
         fclose(f);
     }
 
-    voxel_objects = new Box[N];
+    voxel_objects = new VoxelVolume[N];
     float3 pos = RandomFloat();
     voxel_objects[0].aabb.min = 0.0f;
     voxel_objects[0].aabb.max = 1.0f;

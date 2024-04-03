@@ -46,7 +46,7 @@ private:
     
 	Skydome skydome;
 
-	Box* voxel_objects = nullptr;
+	VoxelVolume* voxel_objects = nullptr;
     BVH bvh;
 
 	bool grid_view = false;

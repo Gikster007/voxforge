@@ -23,7 +23,7 @@ void calculate_bounds(BVHNode& node, Box* voxel_objects, uint* indices)
     }
 }
 
-void BVH::construct_bvh(Box* voxel_objects)
+void BVH::construct_bvh(VoxelVolume* voxel_objects)
 {
     // Create Index Array
     indices = new uint[/*N * N * N*/ N];
@@ -42,7 +42,7 @@ void BVH::construct_bvh(Box* voxel_objects)
     subdivide(voxel_objects, *root, 0);
 }
 
-void BVH::intersect_voxel(Ray& ray, Box& box)
+void BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
 {
     float tmin = 0.0f, tmax = 1e34f;
     float3 corners[2] = {box.aabb.min, box.aabb.max};
@@ -62,12 +62,11 @@ void BVH::intersect_voxel(Ray& ray, Box& box)
         if (tmax < tmin)
             return;
     }
-
     find_nearest(ray, box);
     //ray.t = tmin;
 }
 
-void BVH::intersect_bvh(Box* voxel_objects, Ray& ray, const uint node_idx)
+void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx)
 {
     BVHNode* node = &pool[node_idx], *stack[64];
     uint stack_ptr = 0;
@@ -79,7 +78,7 @@ void BVH::intersect_bvh(Box* voxel_objects, Ray& ray, const uint node_idx)
         if (node->is_leaf())
         {
             for (uint i = 0; i < node->count; i++)
-                intersect_voxel(ray, voxel_objects[indices[node->left_first + i]]);
+                intersect_voxel_volume(ray, voxel_objects[indices[node->left_first + i]]);
             if (stack_ptr == 0)
                 break;
             else
@@ -161,7 +160,7 @@ float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 b
 }
 #endif
 
-bool BVH::setup_3ddda(const Ray& ray, DDAState& state, Box& box)
+bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 {
     // if ray is not inside the world: advance until it is
     state.t = 0;
@@ -186,7 +185,7 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, Box& box)
     return true;
 }
 
-void BVH::find_nearest(Ray& ray, Box& box)
+void BVH::find_nearest(Ray& ray, VoxelVolume& box)
 {
     // Save Initial Ray
     Ray initial_ray = ray;
@@ -197,9 +196,7 @@ void BVH::find_nearest(Ray& ray, Box& box)
     // Setup Amanatides & Woo Grid Traversal
 	DDAState s;
     if (!setup_3ddda(ray, s, box))
-    {
         return;
-    }
 
     // Transform the Ray
     ray.O = TransformPosition(ray.O, inv_model_mat);
@@ -432,10 +429,14 @@ void BVH::subdivide(Box* voxel_objects, BVHNode& node, int id)
     subdivide(voxel_objects, pool[right_child_idx], id + 1);
 }
 
-void Box::populate_grid()
+void VoxelVolume::populate_grid(bool box_or_lightsaber)
 {
     /* Load the model file */
-    FILE* file = fopen("assets/lightsaber.vox", "rb");
+    FILE* file;
+    if (box_or_lightsaber)
+        file = fopen("assets/crate-16.vox", "rb");
+    else
+        file = fopen("assets/lightsaber.vox", "rb");
     uint32_t buffer_size = _filelength(_fileno(file));
     uint8_t* buffer = new uint8_t[buffer_size];
     fread(buffer, buffer_size, 1, file);
