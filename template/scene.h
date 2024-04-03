@@ -13,6 +13,8 @@
 // #define DOF
 
 // low-level / derived
+#define AMD_CPU 1
+
 #define __INTEL_CPU__ 0
 #define WORLDSIZE2	(WORLDSIZE*WORLDSIZE)
 #define GRIDLAYERS 5
@@ -32,6 +34,29 @@
 
 namespace Tmpl8 {
 
+struct Transform // Special Thanks to Lynn
+{
+	Transform() = default;
+	Transform(const float3& _translation, const float3& _rotation, const float3& _scale) : translation(_translation), rotation(_rotation), scale(_scale) {}
+	static float deg_to_rad(float degrees) { return degrees * (PI / 180.0f); }
+
+	mat4 matrix() const
+	{
+		const mat4 t{mat4::Translate(translation)};
+		const mat4 rX{mat4::RotateX(deg_to_rad(rotation.x))};
+		const mat4 rY{mat4::RotateY(deg_to_rad(rotation.y))};
+		const mat4 rZ{mat4::RotateZ(deg_to_rad(rotation.z))};
+		const mat4 r{rX * rY * rZ};
+		const mat4 s{mat4::Scale(scale)};
+
+		return (t * r * s);
+	}
+
+	float3 translation = 0.0f;
+	float3 rotation = 0.0f; // Degrees
+	float3 scale = 1.0f;
+};
+
 class Ray
 {
 public:
@@ -47,12 +72,19 @@ public:
         uint ysign = *(uint*)&D.y >> 31;
         uint zsign = *(uint*)&D.z >> 31;
 
-		Dsign = (float3((float)xsign * 2.0f - 1.0f, (float)ysign * 2.0f - 1.0f, (float)zsign * 2.0f - 1.0f) + 1) * 0.5f;
+		CalculateDsign();
 	}
 	float3 IntersectionPoint() const { return O + t * D; }
 	float3 GetNormal() const;
     float3 GetAlbedo(VoxelData* voxel_data) const;
     float2 GetUV() const;
+    void CalculateDsign()
+    {
+        uint xsign = *(uint*)&D.x >> 31;
+        uint ysign = *(uint*)&D.y >> 31;
+        uint zsign = *(uint*)&D.z >> 31;
+        Dsign = (float3((float)xsign * 2 - 1, (float)ysign * 2 - 1, (float)zsign * 2 - 1) + 1) * 0.5f;
+    }
 	
 	float GetReflectivity( const float3& I ) const; // TODO: implement
 	float GetRefractivity( const float3& I ) const; // TODO: implement
@@ -86,19 +118,21 @@ public:
 	float3 b[2];
 };
 
+struct DDAState
+{
+    int3 step;    // 16 bytes
+    uint X, Y, Z; // 12 bytes
+    float t;      // 4 bytes
+    float3 tdelta;
+    int scale = 0; // 16 bytes
+    float3 tmax;
+    float dummy2 = 0; // 16 bytes, 64 bytes in total
+};
+
 class Scene
 {
 public:
-	struct DDAState
-	{
-		int3 step;				// 16 bytes
-		uint X, Y, Z;			// 12 bytes
-		float t;				// 4 bytes
-		float3 tdelta;
-		int scale = 0;		// 16 bytes
-		float3 tmax;
-		float dummy2 = 0;		// 16 bytes, 64 bytes in total
-	};
+	
 	
 	Scene();
     void FindNearest( Ray& ray, const int layer ) const;

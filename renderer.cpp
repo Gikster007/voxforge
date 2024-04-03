@@ -19,10 +19,17 @@ void Renderer::Init()
     }
 
     voxel_objects = new Box[N];
-    for (int i = 0; i < N; i++)
+    voxel_objects[0].populate_grid();
+
+    for (int i = 1; i < N; i++)
     {
-        voxel_objects[i].min = float3(RandomFloat(), RandomFloat(), RandomFloat()) * i;
-        voxel_objects[i].max = voxel_objects[i].min + 1.0f;
+        voxel_objects[i].populate_grid();
+        voxel_objects[i].model.translation = float3(0.0f, 0.0f, i);
+        voxel_objects[i].min = TransformPosition(voxel_objects[i].min, voxel_objects[i].model.matrix());
+        voxel_objects[i].max = TransformPosition(voxel_objects[i].max, voxel_objects[i].model.matrix());
+
+        /*voxel_objects[i].min = RandomFloat();
+        voxel_objects[i].max = voxel_objects[i].min + 1.0f;*/
     }
 
     bvh.construct_bvh(voxel_objects);
@@ -386,15 +393,14 @@ void Renderer::Tick(float deltaTime)
 
             bvh.intersect_bvh(voxel_objects, r, 0);
 
-            if (r.t < 1e34f)
+            if (/*r.t < 1e34f */ r.voxel != 0)
             {
                 screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(1.0f, 1.0f, 1.0f, 0.0f));
-                if (grid_view)
-                    screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(r.steps / 32.0f, 0.0f));
             }
-
             else
-                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(0.0f, 0.0f, 0.0f, 0.0f));
+                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(r.steps / 16.0f, 0.0f));
+            if (grid_view)
+                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(r.steps / 16.0f, 0.0f));
         }
     }
 
