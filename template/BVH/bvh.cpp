@@ -5,7 +5,7 @@
 #define OGT_VOX_IMPLEMENTATION
 #include "lib/ogt_vox.h"
 
-void calculate_bounds(BVHNode& node, Box* voxel_objects, uint* indices)
+void calculate_bounds(BVHNode& node, VoxelVolume* voxel_objects, uint* indices)
 {
     node.min = float3(1e34f);
     node.max = float3(-1e34f);
@@ -13,7 +13,7 @@ void calculate_bounds(BVHNode& node, Box* voxel_objects, uint* indices)
     for (uint first = node.left_first, i = 0; i < node.count; i++)
     {
         uint idx = indices[first + i];
-        Box& leaf = voxel_objects[idx];
+        VoxelVolume& leaf = voxel_objects[idx];
         node.min.x = fminf(node.min.x, leaf.aabb.min.x);
         node.min.y = fminf(node.min.y, leaf.aabb.min.y);
         node.min.z = fminf(node.min.z, leaf.aabb.min.z);
@@ -237,13 +237,13 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box)
     ray.Dsign = initial_ray.Dsign;
 }
 
-float evaluate_sah(Box* voxel_objects, BVHNode& node, int axis, float pos)
+float evaluate_sah(VoxelVolume* voxel_objects, BVHNode& node, int axis, float pos)
 {
     AABB l_aabb, r_aabb;
     int l_cnt = 0, r_cnt = 0;
     for (uint i = 0; i < node.count; ++i)
     {
-        const Box& box = voxel_objects[node.left_first + i];
+        const VoxelVolume& box = voxel_objects[node.left_first + i];
         const AABB aabb = box.aabb.get_aabb();
         if (aabb.get_center()[axis] < pos)
         {
@@ -262,7 +262,7 @@ float evaluate_sah(Box* voxel_objects, BVHNode& node, int axis, float pos)
     return cost > 0.0f ? cost : 1e34f;
 }
 
-#define SAH_FULL_SWEEP 1
+#define SAH_FULL_SWEEP 0
 #define SAH_BINS 0
 struct Bin
 {
@@ -270,7 +270,7 @@ struct Bin
     uint count = 0;
 };
 
-float BVH::find_best_split_plane(Box* voxel_objects, BVHNode& node, int& axis, float& pos) const
+float BVH::find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int& axis, float& pos) const
 {
     float best_cost = 1e34f;
 #if SAH_FULL_SWEEP
@@ -278,7 +278,7 @@ float BVH::find_best_split_plane(Box* voxel_objects, BVHNode& node, int& axis, f
     {
         for (uint i = 0; i < node.count; ++i)
         {
-            const Box& box = voxel_objects[node.left_first + i];
+            const VoxelVolume& box = voxel_objects[node.left_first + i];
             float candidate_pos = box.aabb.get_center()[a];
             float cost = evaluate_sah(voxel_objects, node, a, candidate_pos);
             if (cost < best_cost)
@@ -305,7 +305,7 @@ float BVH::find_best_split_plane(Box* voxel_objects, BVHNode& node, int& axis, f
         float scale = BINS / (bmax - bmin);
         for (uint i = 0; i < node.count; ++i)
         {
-            const Box& prim = voxel_objects[node.left_first + i];
+            const VoxelVolume& prim = voxel_objects[node.left_first + i];
             int bin_idx = fminf(BINS - 1, static_cast<int>((prim.aabb.get_center()[a] - bmin) * scale));
             bins[bin_idx].count++;
             const AABB prim_bounds = prim.aabb.get_aabb();
@@ -375,7 +375,7 @@ float BVH::find_best_split_plane(Box* voxel_objects, BVHNode& node, int& axis, f
     return best_cost;
 }
 
-void BVH::subdivide(Box* voxel_objects, BVHNode& node, int id)
+void BVH::subdivide(VoxelVolume* voxel_objects, BVHNode& node, int id)
 {
     /*if (node.count <= 2u)
         return;*/
@@ -429,14 +429,10 @@ void BVH::subdivide(Box* voxel_objects, BVHNode& node, int id)
     subdivide(voxel_objects, pool[right_child_idx], id + 1);
 }
 
-void VoxelVolume::populate_grid(bool box_or_lightsaber)
+void VoxelVolume::populate_grid()
 {
     /* Load the model file */
-    FILE* file;
-    if (box_or_lightsaber)
-        file = fopen("assets/crate-16.vox", "rb");
-    else
-        file = fopen("assets/lightsaber.vox", "rb");
+    FILE* file = fopen("assets/lightsaber.vox", "rb");
     uint32_t buffer_size = _filelength(_fileno(file));
     uint8_t* buffer = new uint8_t[buffer_size];
     fread(buffer, buffer_size, 1, file);

@@ -29,7 +29,7 @@ struct alignas(32) AABB
     }
 };
 
-struct alignas(32) Box
+struct alignas(32) VoxelVolume
 {
     uint8_t* grid;
     int size;
@@ -40,7 +40,7 @@ struct alignas(32) Box
         // test if pos is inside the cube
         return pos.x >= aabb.min.x && pos.y >= aabb.min.y && pos.z >= aabb.min.z && pos.x <= aabb.max.x && pos.y <= aabb.max.y && pos.z <= aabb.max.z;
     }
-    void populate_grid(bool box_or_lightsaber);
+    void populate_grid();
 };
 
 struct BVHNode
@@ -76,10 +76,10 @@ class BVH
   public:
     void construct_bvh(VoxelVolume* voxel_objects);
 
-    void intersect_bvh(Box* voxel_objects, Ray& ray, const uint node_idx);
+    void intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx);
 
   private:
-    void intersect_voxel(Ray& ray, Box& box);
+    void intersect_voxel_volume(Ray& ray, VoxelVolume& box);
 #if AMD_CPU
     float intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax);
 #else
@@ -89,9 +89,9 @@ class BVH
     bool setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box);
     void find_nearest(Ray& ray, VoxelVolume& box);
 
-    float find_best_split_plane(Box* voxel_objects, BVHNode& node, int& axis, float& pos) const;
+    float find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int& axis, float& pos) const;
 
-    void subdivide(Box* voxel_objects, BVHNode& node, int id);
+    void subdivide(VoxelVolume* voxel_objects, BVHNode& node, int id);
 
   private:
     uint* indices = nullptr;
