@@ -20,21 +20,19 @@ void Renderer::Init()
 
     voxel_objects = new VoxelVolume[N];
     float3 pos = RandomFloat();
-    voxel_objects[0].aabb.min = 0.0f;
-    voxel_objects[0].aabb.max = 1.0f;
+    voxel_objects[0].min = 0.0f;
+    voxel_objects[0].max = 1.0f;
+    voxel_objects[0].model.rotation = float3(0.0f, 0.0f, 0.0f);
     voxel_objects[0].populate_grid();
-    //voxel_objects[0].model.rotation = float3(0.15f, 0.0f, 0.0f);
 
-    for (int i = 1; i < N; i++)
+    /*for (int i = 1; i < N; i++)
     {
-        voxel_objects[i].populate_grid();
-        voxel_objects[i].model.translation = pos * i * 10.0f;
+        voxel_objects[i].model.translation = pos * i * 20.0f;
         voxel_objects[i].model.rotation = float3(0.0f, 0.0f, 0.0f);
-        voxel_objects[i].aabb.min = 0.0f;
-        voxel_objects[i].aabb.max = 1.0f;
-        voxel_objects[i].aabb.min = TransformPosition(voxel_objects[i].aabb.min, voxel_objects[i].model.matrix());
-        voxel_objects[i].aabb.max = TransformPosition(voxel_objects[i].aabb.max, voxel_objects[i].model.matrix());
-    }
+        voxel_objects[i].min = 0.0f;
+        voxel_objects[i].max = 1.0f;
+        voxel_objects[i].populate_grid();
+    }*/
 
     /*for (int z = 0; z < N; z++)
     {

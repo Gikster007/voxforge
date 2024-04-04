@@ -14,12 +14,13 @@ void calculate_bounds(BVHNode& node, VoxelVolume* voxel_objects, uint* indices)
     {
         uint idx = indices[first + i];
         VoxelVolume& leaf = voxel_objects[idx];
-        node.min.x = fminf(node.min.x, leaf.aabb.min.x);
-        node.min.y = fminf(node.min.y, leaf.aabb.min.y);
-        node.min.z = fminf(node.min.z, leaf.aabb.min.z);
-        node.max.x = fmaxf(node.max.x, leaf.aabb.max.x);
-        node.max.y = fmaxf(node.max.y, leaf.aabb.max.y);
-        node.max.z = fmaxf(node.max.z, leaf.aabb.max.z);
+        AABB aabb = leaf.get_aabb();
+        node.min.x = fminf(node.min.x, aabb.min.x);
+        node.min.y = fminf(node.min.y, aabb.min.y);
+        node.min.z = fminf(node.min.z, aabb.min.z);
+        node.max.x = fmaxf(node.max.x, aabb.max.x);
+        node.max.y = fmaxf(node.max.y, aabb.max.y);
+        node.max.z = fmaxf(node.max.z, aabb.max.z);
     }
 }
 
@@ -45,7 +46,8 @@ void BVH::construct_bvh(VoxelVolume* voxel_objects)
 void BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
 {
     float tmin = 0.0f, tmax = 1e34f;
-    float3 corners[2] = {box.aabb.min, box.aabb.max};
+    AABB aabb = box.get_aabb();
+    float3 corners[2] = {aabb.min, aabb.max};
 
     for (int d = 0; d < 3; ++d)
     {
@@ -62,13 +64,14 @@ void BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
         if (tmax < tmin)
             return;
     }
-    find_nearest(ray, box);
-    //ray.t = tmin;
+    find_nearest(ray, box, GRIDLAYERS);
+    return;
+    // ray.t = tmin;
 }
 
 void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx)
 {
-    BVHNode* node = &pool[node_idx], *stack[64];
+    BVHNode *node = &pool[node_idx], *stack[64];
     uint stack_ptr = 0;
 
     while (1)
@@ -92,7 +95,7 @@ void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_id
 #if AMD_CPU
         float dist1 = intersect_aabb(ray, child1->min, child1->max);
         float dist2 = intersect_aabb(ray, child2->min, child2->max);
-#else 
+#else
         float dist1 = intersect_aabb_sse(ray, child1->min4, child1->max4);
         float dist2 = intersect_aabb_sse(ray, child2->min4, child2->max4);
 #endif
@@ -135,7 +138,7 @@ float BVH::intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax)
 #else
 float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 bmax4)
 {
-    //static __m128 mask4 = _mm_cmpeq_ps(_mm_setzero_ps(), _mm_set_ps(1, 0, 0, 0));
+    // static __m128 mask4 = _mm_cmpeq_ps(_mm_setzero_ps(), _mm_set_ps(1, 0, 0, 0));
     const __m128i imask4 = _mm_set_epi32(0, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
     const __m128 mask4 = (__m128&)imask4;
     __m128 t1 = _mm_mul_ps(_mm_sub_ps(_mm_and_ps(bmin4, mask4), ray.O4), ray.rD4);
@@ -149,14 +152,14 @@ float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 b
         return 1e34f;
 
     /* idea to use fmsub to save 1 instruction came from <http://www.joshbarczak.com/blog/?p=787> */
-    //const __m128 rd = _mm_mul_ps(ray.O4, ray.rD4); /* You can even cache this so you only have to compute it once :) */
-    //const __m128 t1 = _mm_fmsub_ps(bmin4, ray.rD4, rd);
-    //const __m128 t2 = _mm_fmsub_ps(bmax4, ray.rD4, rd);
-    //const __m128 vmax4 = _mm_max_ps(t1, t2), vmin4 = _mm_min_ps(t1, t2);
-    //const float tmax = min(vmax4.m128_f32[0], min(vmax4.m128_f32[1], vmax4.m128_f32[2]));
-    //const float tmin = max(vmin4.m128_f32[0], max(vmin4.m128_f32[1], vmin4.m128_f32[2]));
-    //const bool hit = (tmax > 0 && tmax >= tmin);
-    //return hit ? tmin : 1e34f;
+    // const __m128 rd = _mm_mul_ps(ray.O4, ray.rD4); /* You can even cache this so you only have to compute it once :) */
+    // const __m128 t1 = _mm_fmsub_ps(bmin4, ray.rD4, rd);
+    // const __m128 t2 = _mm_fmsub_ps(bmax4, ray.rD4, rd);
+    // const __m128 vmax4 = _mm_max_ps(t1, t2), vmin4 = _mm_min_ps(t1, t2);
+    // const float tmax = min(vmax4.m128_f32[0], min(vmax4.m128_f32[1], vmax4.m128_f32[2]));
+    // const float tmin = max(vmin4.m128_f32[0], max(vmin4.m128_f32[1], vmin4.m128_f32[2]));
+    // const bool hit = (tmax > 0 && tmax >= tmin);
+    // return hit ? tmin : 1e34f;
 }
 #endif
 
@@ -164,16 +167,17 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 {
     // if ray is not inside the world: advance until it is
     state.t = 0;
+    AABB aabb = AABB(0.0f, 1.0f);
     if (!box.contains(ray.O))
     {
-        state.t = intersect_aabb(ray, box.aabb.min, box.aabb.max);
+        state.t = intersect_aabb(ray, aabb.min, aabb.max);
         if (state.t > 1e33f)
             return false; // ray misses voxel data entirely
     }
     // setup amanatides & woo - assume world is 1x1x1, from (0,0,0) to (1,1,1)
-    const float3 voxelMinBounds = box.aabb.min;
-    const float3 voxelMaxBounds = box.aabb.max - box.aabb.min;
-    static const float cellSize = 1.0f / box.size;
+    const float3 voxelMinBounds = aabb.min;
+    const float3 voxelMaxBounds = aabb.max - aabb.min;
+    const float cellSize = 1.0f / box.size;
     state.step = make_int3(1 - ray.Dsign * 2);
     const float3 posInGrid = box.size * ((ray.O - voxelMinBounds) + (state.t + 0.00005f) * ray.D) / voxelMaxBounds;
     const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
@@ -185,7 +189,7 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
     return true;
 }
 
-void BVH::find_nearest(Ray& ray, VoxelVolume& box)
+void BVH::find_nearest(Ray& ray, VoxelVolume& box, int layer)
 {
     // Save Initial Ray
     Ray initial_ray = ray;
@@ -193,43 +197,74 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box)
     mat4 model_mat = box.model.matrix();
     mat4 inv_model_mat = model_mat.Inverted();
 
-    // Setup Amanatides & Woo Grid Traversal
-	DDAState s;
-    if (!setup_3ddda(ray, s, box))
-        return;
-
     // Transform the Ray
     ray.O = TransformPosition(ray.O, inv_model_mat);
     ray.D = TransformVector(ray.D, inv_model_mat);
     ray.rD = float3(1.0f / ray.D.x, 1.0f / ray.D.y, 1.0f / ray.D.z);
     ray.CalculateDsign();
 
-	// Start Stepping
-	while (s.t <= ray.t)
-	{
+    // Setup Amanatides & Woo Grid Traversal
+    DDAState s;
+    if (!setup_3ddda(ray, s, box))
+    {
+        // Restore the original ray's transform
+        ray.O = initial_ray.O;
+        ray.D = initial_ray.D;
+        ray.rD = initial_ray.rD;
+        ray.Dsign = initial_ray.Dsign;
+        return;
+    }
+
+    // Start Stepping
+    while (s.t <= ray.t)
+    {
         const uint8_t cell = box.grid[(s.Z * box.size * box.size) + (s.Y * box.size) + s.X];
 
-		if (cell)
-		{
-			ray.t = s.t;
-			ray.voxel = cell;
+        if (cell)
+        {
+            ray.t = s.t;
+            ray.voxel = cell;
 
             // If the Ray Intersected With a Primitive Within The BVH
             // Correct the Normal Based on The Transformation
             ray.N = normalize(TransformVector(ray.N, model_mat));
-			break;
-		}
-		if (s.tmax.x < s.tmax.y)
-		{
-			if (s.tmax.x < s.tmax.z) { s.t = s.tmax.x, s.X += s.step.x; if (s.X >= box.size) break; s.tmax.x += s.tdelta.x; }
-			else { s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= box.size) break; s.tmax.z += s.tdelta.z; }
-		}
-		else
-		{
-			if (s.tmax.y < s.tmax.z) { s.t = s.tmax.y, s.Y += s.step.y; if (s.Y >= box.size) break; s.tmax.y += s.tdelta.y; }
-			else { s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= box.size) break; s.tmax.z += s.tdelta.z; }
-		}  
-	}
+            break;
+        }
+        if (s.tmax.x < s.tmax.y)
+        {
+            if (s.tmax.x < s.tmax.z)
+            {
+                s.t = s.tmax.x, s.X += s.step.x;
+                if (s.X >= box.size)
+                    break;
+                s.tmax.x += s.tdelta.x;
+            }
+            else
+            {
+                s.t = s.tmax.z, s.Z += s.step.z;
+                if (s.Z >= box.size)
+                    break;
+                s.tmax.z += s.tdelta.z;
+            }
+        }
+        else
+        {
+            if (s.tmax.y < s.tmax.z)
+            {
+                s.t = s.tmax.y, s.Y += s.step.y;
+                if (s.Y >= box.size)
+                    break;
+                s.tmax.y += s.tdelta.y;
+            }
+            else
+            {
+                s.t = s.tmax.z, s.Z += s.step.z;
+                if (s.Z >= box.size)
+                    break;
+                s.tmax.z += s.tdelta.z;
+            }
+        }
+    }
     // Restore the original ray's transform
     ray.O = initial_ray.O;
     ray.D = initial_ray.D;
@@ -244,7 +279,7 @@ float evaluate_sah(VoxelVolume* voxel_objects, BVHNode& node, int axis, float po
     for (uint i = 0; i < node.count; ++i)
     {
         const VoxelVolume& box = voxel_objects[node.left_first + i];
-        const AABB aabb = box.aabb.get_aabb();
+        const AABB aabb = box.get_aabb();
         if (aabb.get_center()[axis] < pos)
         {
             l_cnt++;
@@ -279,7 +314,7 @@ float BVH::find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int&
         for (uint i = 0; i < node.count; ++i)
         {
             const VoxelVolume& box = voxel_objects[node.left_first + i];
-            float candidate_pos = box.aabb.get_center()[a];
+            float candidate_pos = box.get_aabb().get_center()[a];
             float cost = evaluate_sah(voxel_objects, node, a, candidate_pos);
             if (cost < best_cost)
                 pos = candidate_pos, axis = a, best_cost = cost;
@@ -293,7 +328,7 @@ float BVH::find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int&
         float bmin = 1e34f, bmax = -1e34f;
         for (uint i = 0; i < node.count; ++i)
         {
-            float3 prim_center = voxel_objects[node.left_first + i].aabb.get_center();
+            float3 prim_center = voxel_objects[node.left_first + i].get_aabb().get_center();
             bmin = fminf(bmin, prim_center[a]);
             bmax = fmaxf(bmax, prim_center[a]);
         }
@@ -306,9 +341,9 @@ float BVH::find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int&
         for (uint i = 0; i < node.count; ++i)
         {
             const VoxelVolume& prim = voxel_objects[node.left_first + i];
-            int bin_idx = fminf(BINS - 1, static_cast<int>((prim.aabb.get_center()[a] - bmin) * scale));
+            int bin_idx = fminf(BINS - 1, static_cast<int>((prim.get_aabb().get_center()[a] - bmin) * scale));
             bins[bin_idx].count++;
-            const AABB prim_bounds = prim.aabb.get_aabb();
+            const AABB prim_bounds = prim.get_aabb();
             bins[bin_idx].aabb.grow(prim_bounds.min);
             bins[bin_idx].aabb.grow(prim_bounds.max);
         }
@@ -354,7 +389,7 @@ float BVH::find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int&
         float bmin = 1e34f, bmax = -1e34f;
         for (uint i = 0; i < node.count; ++i)
         {
-            float3 prim_center = voxel_objects[node.left_first + i].aabb.get_center();
+            float3 prim_center = voxel_objects[node.left_first + i].get_aabb().get_center();
             bmin = min(bmin, prim_center[a]);
             bmax = max(bmax, prim_center[a]);
         }
@@ -397,7 +432,7 @@ void BVH::subdivide(VoxelVolume* voxel_objects, BVHNode& node, int id)
     int j = i + node.count - 1;
     while (i <= j)
     {
-        if (voxel_objects[i].aabb.get_center()[split_axis] < split_t)
+        if (voxel_objects[i].get_aabb().get_center()[split_axis] < split_t)
         {
             i++;
         }
@@ -463,9 +498,9 @@ void VoxelVolume::populate_grid()
                 if (voxel_index != 0)
                 {
                     printf("Voxel Index: %u \n", voxel_index);
-                    //voxel_data[voxel_index].color.x = scene->palette.color[voxel_index].r / 255.0f;
-                    //voxel_data[voxel_index].color.y = scene->palette.color[voxel_index].g / 255.0f;
-                    //voxel_data[voxel_index].color.z = scene->palette.color[voxel_index].b / 255.0f;
+                    // voxel_data[voxel_index].color.x = scene->palette.color[voxel_index].r / 255.0f;
+                    // voxel_data[voxel_index].color.y = scene->palette.color[voxel_index].g / 255.0f;
+                    // voxel_data[voxel_index].color.z = scene->palette.color[voxel_index].b / 255.0f;
                 }
 
 #if !AMD_CPU

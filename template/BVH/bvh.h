@@ -1,13 +1,19 @@
 #pragma once
 
-constexpr int N = 4; // Amount of Voxel Models in the game
+constexpr int N = 1; // Amount of Voxel Models in the game
+constexpr int NOISESIZE = 128;
 
 struct alignas(32) AABB
 {
     float3 min = 1e34f;
     float3 max = -1e34f;
 
-    AABB get_aabb() const { return *this; }
+    AABB() = default;
+    AABB(float3 _min, float3 _max)
+    {
+        min = _min;
+        max = _max;
+    }
     float3 get_center() const { return min + (max - min) * 0.5f; }
     void grow(const float3 p)
     {
@@ -34,18 +40,31 @@ struct alignas(32) VoxelVolume
     uint8_t* grid;
     int size;
     Transform model;
-    AABB aabb;
+    float3 min = 1e34f, max = -1e34f;
     bool contains(const float3& pos) const
     {
         // test if pos is inside the cube
+        AABB aabb = get_aabb();
         return pos.x >= aabb.min.x && pos.y >= aabb.min.y && pos.z >= aabb.min.z && pos.x <= aabb.max.x && pos.y <= aabb.max.y && pos.z <= aabb.max.z;
     }
     void populate_grid();
+    AABB get_aabb() const // Credit to Max
+    {
+        float3 s = max - min; // size
+        const float3 extent = s * 0.5f;
+        mat4 mat = model.matrix();
+
+        /* Inspired by : <https://zeux.io/2010/10/17/aabb-from-obb-with-component-wise-abs/> */
+        /* Get the transformed center and extent */
+        const float3 t_center = TransformPosition(s * 0.5f, mat);
+        const float3 t_extent = TransformVector(extent, fabs(mat));
+
+        return AABB(t_center - t_extent, t_center + t_extent);
+    }
 };
 
 struct BVHNode
 {
-    void subdivide(uint node_idx, VoxelVolume* voxel_objects, BVHNode* pool, uint pool_ptr, uint* indices, uint& nodes_used);
     bool is_leaf() const { return count > 0; }
 
 #if AMD_CPU
@@ -87,7 +106,7 @@ class BVH
 #endif
 
     bool setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box);
-    void find_nearest(Ray& ray, VoxelVolume& box);
+    void find_nearest(Ray& ray, VoxelVolume& box, int layer);
 
     float find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int& axis, float& pos) const;
 
