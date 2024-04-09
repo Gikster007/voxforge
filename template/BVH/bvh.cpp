@@ -27,12 +27,12 @@ void calculate_bounds(BVHNode& node, VoxelVolume* voxel_objects, uint* indices)
 void BVH::construct_bvh(VoxelVolume* voxel_objects)
 {
     // Create Index Array
-    indices = new uint[/*N * N * N*/ N];
+    indices = new uint[N];
     for (int i = 0; i < N /*N * N * N*/; i++)
         indices[i] = i;
 
     // Allocate BVH Root Node
-    pool = new BVHNode[/*N * N * N*/ N * 2];
+    pool = new BVHNode[/*(N * N * N)*/ N * 2];
     root = &pool[0];
     pool_ptr = 2;
 
@@ -467,7 +467,7 @@ void BVH::subdivide(VoxelVolume* voxel_objects, BVHNode& node, int id)
 void VoxelVolume::populate_grid()
 {
     /* Load the model file */
-    FILE* file = fopen("assets/lightsaber.vox", "rb");
+    FILE* file = fopen("assets/floor.vox", "rb");
     uint32_t buffer_size = _filelength(_fileno(file));
     uint8_t* buffer = new uint8_t[buffer_size];
     fread(buffer, buffer_size, 1, file);
@@ -506,7 +506,7 @@ void VoxelVolume::populate_grid()
 #if !AMD_CPU
                 grid[morton_encode(floor(y / b), floor(z / b), floor(x / b))] = voxel_index == 0 ? 0 : 1;
 #else
-                grid[(z * model->size_y * model->size_x) + (y * model->size_x) + x] = voxel_index == 0 ? 0 : 1;
+                grid[(x * model->size_y * model->size_x) + (z * model->size_x) + y] = voxel_index == 0 ? 0 : 1;
 #endif
             }
         }

@@ -1,6 +1,6 @@
 #pragma once
 
-constexpr int N = 1; // Amount of Voxel Models in the game
+constexpr int N = 9; // Amount of Voxel Models in the game
 constexpr int NOISESIZE = 128;
 
 struct alignas(32) AABB

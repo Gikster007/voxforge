@@ -19,37 +19,42 @@ void Renderer::Init()
     }
 
     voxel_objects = new VoxelVolume[N];
+    //voxel_objects = (VoxelVolume*)MALLOC64( N * N * N * (sizeof(VoxelVolume)) );
+    //memset(voxel_objects, 0, N * N * N * sizeof(VoxelVolume));
+
     float3 pos = RandomFloat();
-    voxel_objects[0].min = 0.0f;
+    /*voxel_objects[0].min = 0.0f;
     voxel_objects[0].max = 1.0f;
     voxel_objects[0].model.rotation = float3(0.0f, 0.0f, 0.0f);
     voxel_objects[0].populate_grid();
 
-    /*for (int i = 1; i < N; i++)
+    for (int i = 1; i < N; i++)
     {
-        voxel_objects[i].model.translation = pos * i * 20.0f;
+        voxel_objects[i].model.translation = pos * float3(i * 20.0f, 0.0f, 0.0f);
         voxel_objects[i].model.rotation = float3(0.0f, 0.0f, 0.0f);
         voxel_objects[i].min = 0.0f;
         voxel_objects[i].max = 1.0f;
         voxel_objects[i].populate_grid();
     }*/
 
-    /*for (int z = 0; z < N; z++)
+    for (int z = 0; z < N / 3; z++)
     {
-        for (int y = 0; y < N; y++)
+        for (int y = 0; y < 1; y++)
         {
-            for (int x = 0; x < N; x++)
+            for (int x = 0; x < N / 3; x++)
             {
-                voxel_objects[x + y * N + z * N * N].aabb.min = pos * 2.0f;
-                voxel_objects[x + y * N + z * N * N].aabb.max = voxel_objects[x + y * N + z * N * N].aabb.min + 1.0f;
-                voxel_objects[x + y * N + z * N * N].populate_grid();
+                int index = (z * (N / 3) * 1) + (y * (N / 3)) + x;
+                voxel_objects[index].min = 0.0f;
+                voxel_objects[index].max = 1.0f;
+                voxel_objects[index].model.translation = float3(x, y, z);
+                voxel_objects[index].populate_grid();
             }
         }
-    }*/
+    }
 
     bvh.construct_bvh(voxel_objects);
 
-    skydome = Skydome();
+    //skydome = Skydome();
 }
 
 bool activate_lightsaber = false;
@@ -413,7 +418,7 @@ void Renderer::Tick(float deltaTime)
                 screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(1.0f, 1.0f, 1.0f, 0.0f));
             }
             else
-                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(r.steps / 16.0f, 0.0f));
+                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(/*r.steps / 16.0f, */0.0f));
 
             if (grid_view)
                 screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(r.steps / 16.0f, 0.0f));
