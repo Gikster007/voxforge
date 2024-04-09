@@ -43,7 +43,7 @@ void BVH::construct_bvh(VoxelVolume* voxel_objects)
     subdivide(voxel_objects, *root, 0);
 }
 
-void BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
+float BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
 {
     float tmin = 0.0f, tmax = 1e34f;
     AABB aabb = box.get_aabb();
@@ -62,10 +62,10 @@ void BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
         tmax = std::min(dmax, tmax);
         /* Early out check, saves a lot of compute */
         if (tmax < tmin)
-            return;
+            return 1e34f;
     }
-    find_nearest(ray, box, GRIDLAYERS);
-    return;
+
+    return tmin;
     // ray.t = tmin;
 }
 
@@ -73,6 +73,7 @@ void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_id
 {
     BVHNode *node = &pool[node_idx], *stack[64];
     uint stack_ptr = 0;
+    float last_hit = 1e34f;
 
     while (1)
     {
@@ -81,7 +82,18 @@ void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_id
         if (node->is_leaf())
         {
             for (uint i = 0; i < node->count; i++)
-                intersect_voxel_volume(ray, voxel_objects[indices[node->left_first + i]]);
+            {
+                const float hit = intersect_voxel_volume(ray, voxel_objects[indices[node->left_first + i]]);
+                if (hit >= last_hit)
+                    continue;
+
+                find_nearest(ray, voxel_objects[indices[node->left_first + i]], GRIDLAYERS);
+
+                if (ray.t < last_hit)
+                {
+                    last_hit = ray.t;
+                }
+            }
             if (stack_ptr == 0)
                 break;
             else
@@ -165,6 +177,7 @@ float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 b
 
 bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 {
+#if 1
     // if ray is not inside the world: advance until it is
     state.t = 0;
     AABB aabb = AABB(0.0f, 1.0f);
@@ -187,15 +200,40 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
     state.tmax = ((gridPlanes * voxelMaxBounds) - (ray.O - voxelMinBounds)) * ray.rD;
     // proceed with traversal
     return true;
+#else
+    // if ray is not inside the world: advance until it is
+    state.t = 0;
+    AABB aabb = AABB(0.0f, 1.0f);
+    if (!box.contains(ray.O))
+    {
+        state.t = intersect_aabb(ray, aabb.min, aabb.max);
+        if (state.t > 1e33f)
+            return false; // ray misses voxel data entirely
+    }
+
+    // setup amanatides & woo - assume world is 1x1x1, from (0,0,0) to (1,1,1)
+    const float inv = 1.0f / state.scale;
+    const int gridSize = GRIDSIZE * inv;
+    const float cellSize = 1.0f / gridSize;
+    state.step = make_int3(1 - ray.Dsign * 2);
+    const float3 posInGrid = gridSize * (ray.O + (state.t + 0.00005f) * ray.D);
+    const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
+    const int3 P = clamp(make_int3(posInGrid), 0, gridSize - 1);
+    state.X = P.x, state.Y = P.y, state.Z = P.z;
+    state.tdelta = (cellSize * float3(state.step) * ray.rD);
+    state.tmax = ((gridPlanes - ray.O) * ray.rD);
+    return true;
+#endif
 }
 
-void BVH::find_nearest(Ray& ray, VoxelVolume& box, int layer)
-{
+void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
+{   
+    #if 1
     // Save Initial Ray
     Ray initial_ray = ray;
 
-    mat4 model_mat = box.model.matrix();
-    mat4 inv_model_mat = model_mat.Inverted();
+    mat4 model_mat = box.model.mat;
+    mat4 inv_model_mat = box.model.inv;
 
     // Transform the Ray
     ray.O = TransformPosition(ray.O, inv_model_mat);
@@ -270,6 +308,48 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, int layer)
     ray.D = initial_ray.D;
     ray.rD = initial_ray.rD;
     ray.Dsign = initial_ray.Dsign;
+    #else
+    // setup Amanatides & Woo grid traversal
+    DDAState s;
+    s.scale = (1 << (layer - 1));
+    if (!setup_3ddda(ray, s, box))
+        return;
+
+    const int grid_size = GRIDSIZE / s.scale;
+    while (1)
+    {
+        ray.steps++;
+        #if !AMD_CPU
+            const uint cell = box.grids[layer - 1][morton_encode(s.X, s.Y, s.Z)];
+        #else
+            const uint cell = box.grids[layer - 1][s.X + s.Y * grid_size + s.Z * grid_size * grid_size];
+        #endif
+       
+        if (cell)
+        {
+            ray.t = s.t;
+            ray.I = ray.O + ray.t * ray.D;
+
+            if (layer > 1)
+            {
+                Ray new_ray(ray.I, ray.D);
+                find_nearest(new_ray, box, layer - 1);
+                ray.voxel = new_ray.voxel;
+                ray.I = new_ray.I;
+                ray.t += new_ray.t;
+                ray.steps += new_ray.steps;
+            }
+            else
+                ray.voxel = cell;
+
+            break;
+        }
+        if (s.tmax.x < s.tmax.y){ if (s.tmax.x < s.tmax.z) { s.t = s.tmax.x, s.X += s.step.x; if (s.X >= grid_size) break; s.tmax.x += s.tdelta.x; }
+            else { s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= grid_size) break; s.tmax.z += s.tdelta.z; }}
+        else { if (s.tmax.y < s.tmax.z) { s.t = s.tmax.y, s.Y += s.step.y; if (s.Y >= grid_size) break; s.tmax.y += s.tdelta.y; }
+            else { s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= grid_size) break; s.tmax.z += s.tdelta.z;}}
+    }
+    #endif
 }
 
 float evaluate_sah(VoxelVolume* voxel_objects, BVHNode& node, int axis, float pos)
@@ -486,6 +566,14 @@ void VoxelVolume::populate_grid()
     grid = (uint8_t*)MALLOC64(grid_size);
     memset(grid, 0, grid_size);
 
+    for (size_t i = 0; i < GRIDLAYERS; i++)
+    {
+        uint8_t b = 1 << i;
+        int grid_size = pow((GRIDSIZE / b), 3) * sizeof(uint8_t);
+        grids[i] = (uint8_t*)MALLOC64(grid_size);
+        memset(grids[i], 0, grid_size);
+    }
+
 #pragma omp parallel for schedule(dynamic)
     for (int z = 0; z < model->size_z; z++)
     {
@@ -497,11 +585,21 @@ void VoxelVolume::populate_grid()
 
                 if (voxel_index != 0)
                 {
-                    printf("Voxel Index: %u \n", voxel_index);
+                    //printf("Voxel Index: %u \n", voxel_index);
                     // voxel_data[voxel_index].color.x = scene->palette.color[voxel_index].r / 255.0f;
                     // voxel_data[voxel_index].color.y = scene->palette.color[voxel_index].g / 255.0f;
                     // voxel_data[voxel_index].color.z = scene->palette.color[voxel_index].b / 255.0f;
                 }
+
+                /*for (size_t i = 0; i < GRIDLAYERS; i++)
+                {
+                    uint8_t b = (1 << i);
+#if !AMD_CPU
+                    grids[i][morton_encode(floor(x / b), floor(y / b), floor(z / b))] = 1;
+#else
+                    grids[i][(x / b) + (y / b) * (GRIDSIZE / b) + (z / b) * (GRIDSIZE / b) * (GRIDSIZE / b)] = voxel_index == 0 ? 0 : 1;
+#endif
+                }*/
 
 #if !AMD_CPU
                 grid[morton_encode(floor(y / b), floor(z / b), floor(x / b))] = voxel_index == 0 ? 0 : 1;

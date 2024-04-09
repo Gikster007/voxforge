@@ -42,12 +42,12 @@ public:
 		float3 right = normalize( cross( tmpUp, ahead ) );
 		float3 up = normalize( cross( ahead, right ) );
 		bool changed = false;
-		if (IsKeyDown( GLFW_KEY_A )) camPos -= speed * 2 * right, changed = true;
-		if (IsKeyDown( GLFW_KEY_D )) camPos += speed * 2 * right, changed = true;
-		if (IsKeyDown( GLFW_KEY_W )) camPos += speed * 2 * ahead, changed = true;
-		if (IsKeyDown( GLFW_KEY_S )) camPos -= speed * 2 * ahead, changed = true;
-		if (IsKeyDown( GLFW_KEY_R )) camPos += speed * 2 * up, changed = true;
-		if (IsKeyDown( GLFW_KEY_F )) camPos -= speed * 2 * up, changed = true;
+		if (IsKeyDown( GLFW_KEY_A )) camPos -= speed * 0.25f * right, changed = true;
+		if (IsKeyDown( GLFW_KEY_D )) camPos += speed * 0.25f * right, changed = true;
+		if (IsKeyDown( GLFW_KEY_W )) camPos += speed * 0.25f * ahead, changed = true;
+		if (IsKeyDown( GLFW_KEY_S )) camPos -= speed * 0.25f * ahead, changed = true;
+		if (IsKeyDown( GLFW_KEY_R )) camPos += speed * 0.25f * up, changed = true;
+		if (IsKeyDown( GLFW_KEY_F )) camPos -= speed * 0.25f * up, changed = true;
 		camTarget = camPos + ahead;
 		if (IsKeyDown( GLFW_KEY_UP )) camTarget -= speed * 2 * up, changed = true;
 		if (IsKeyDown( GLFW_KEY_DOWN )) camTarget += speed * 2 * up, changed = true;

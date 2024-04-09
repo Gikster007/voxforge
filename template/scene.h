@@ -5,7 +5,7 @@
 
 // high level settings
 // #define TWOLEVEL
-#define WORLDSIZE 128 // power of 2. Warning: max 512 for a 512x512x512x4 bytes = 512MB world!
+#define WORLDSIZE 64 // power of 2. Warning: max 512 for a 512x512x512x4 bytes = 512MB world!
 // #define USE_SIMD
 // #define USE_FMA3
 // #define SKYDOME
@@ -16,7 +16,7 @@
 #define AMD_CPU 1
 
 #define WORLDSIZE2	(WORLDSIZE*WORLDSIZE)
-#define GRIDLAYERS 5
+#define GRIDLAYERS 4
 #ifdef TWOLEVEL
 // feel free to replace with whatever suits your two-level implementation,
 // should you chose this challenge.
@@ -54,6 +54,8 @@ struct Transform // Special Thanks to Lynn
     float3 translation = 0.0f;
     float3 rotation = 0.0f; // Degrees
     float3 scale = 1.0f;
+    mat4 mat;
+    mat4 inv;
 };
 
 

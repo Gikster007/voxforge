@@ -1,6 +1,6 @@
 #pragma once
 
-constexpr int N = 9; // Amount of Voxel Models in the game
+constexpr int N = 1; // Amount of Voxel Models in the game
 constexpr int NOISESIZE = 128;
 
 struct alignas(32) AABB
@@ -38,6 +38,7 @@ struct alignas(32) AABB
 struct alignas(32) VoxelVolume
 {
     uint8_t* grid;
+    uint8_t* grids[GRIDLAYERS];
     int size;
     Transform model;
     float3 min = 1e34f, max = -1e34f;
@@ -52,7 +53,7 @@ struct alignas(32) VoxelVolume
     {
         float3 s = max - min; // size
         const float3 extent = s * 0.5f;
-        mat4 mat = model.matrix();
+        mat4 mat = model.mat;
 
         /* Inspired by : <https://zeux.io/2010/10/17/aabb-from-obb-with-component-wise-abs/> */
         /* Get the transformed center and extent */
@@ -98,7 +99,7 @@ class BVH
     void intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx);
 
   private:
-    void intersect_voxel_volume(Ray& ray, VoxelVolume& box);
+    float intersect_voxel_volume(Ray& ray, VoxelVolume& box);
 #if AMD_CPU
     float intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax);
 #else
@@ -106,7 +107,7 @@ class BVH
 #endif
 
     bool setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box);
-    void find_nearest(Ray& ray, VoxelVolume& box, int layer);
+    void find_nearest(Ray& ray, VoxelVolume& box, const int layer);
 
     float find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int& axis, float& pos) const;
 

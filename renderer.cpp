@@ -23,12 +23,14 @@ void Renderer::Init()
     //memset(voxel_objects, 0, N * N * N * sizeof(VoxelVolume));
 
     float3 pos = RandomFloat();
-    /*voxel_objects[0].min = 0.0f;
+    voxel_objects[0].min = 0.0f;
     voxel_objects[0].max = 1.0f;
     voxel_objects[0].model.rotation = float3(0.0f, 0.0f, 0.0f);
+    voxel_objects[0].model.mat = voxel_objects[0].model.matrix();
+    voxel_objects[0].model.inv = voxel_objects[0].model.mat.Inverted();
     voxel_objects[0].populate_grid();
 
-    for (int i = 1; i < N; i++)
+    /*for (int i = 1; i < N; i++)
     {
         voxel_objects[i].model.translation = pos * float3(i * 20.0f, 0.0f, 0.0f);
         voxel_objects[i].model.rotation = float3(0.0f, 0.0f, 0.0f);
@@ -37,7 +39,7 @@ void Renderer::Init()
         voxel_objects[i].populate_grid();
     }*/
 
-    for (int z = 0; z < N / 3; z++)
+    /*for (int z = 0; z < N / 3; z++)
     {
         for (int y = 0; y < 1; y++)
         {
@@ -47,10 +49,12 @@ void Renderer::Init()
                 voxel_objects[index].min = 0.0f;
                 voxel_objects[index].max = 1.0f;
                 voxel_objects[index].model.translation = float3(x, y, z);
+                voxel_objects[index].model.mat = voxel_objects[index].model.matrix();
+                voxel_objects[index].model.inv = voxel_objects[index].model.mat.Inverted();
                 voxel_objects[index].populate_grid();
             }
         }
-    }
+    }*/
 
     bvh.construct_bvh(voxel_objects);
 
@@ -393,22 +397,22 @@ void Renderer::Tick(float deltaTime)
         // trace a primary ray for each pixel on the line
         for (int x = 0; x < SCRWIDTH; x++)
         {
-            //// Generate Random Offsets Within Each Pixel
-            //float x_offset = Rand(1.0f) - 0.5f;
-            //float y_offset = Rand(1.0f) - 0.5f;
+        //    // Generate Random Offsets Within Each Pixel
+        //    float x_offset = Rand(1.0f) - 0.5f;
+        //    float y_offset = Rand(1.0f) - 0.5f;
 
-            //// Calculate Sample Position Within The Pixel
-            //float sample_x = (float)x + 0.5f + x_offset;
-            //float sample_y = (float)y + 0.5f + y_offset;
+        //    // Calculate Sample Position Within The Pixel
+        //    float sample_x = (float)x + 0.5f + x_offset;
+        //    float sample_y = (float)y + 0.5f + y_offset;
 
-            //float4 p = float4(Trace(camera.GetPrimaryRay(sample_x, sample_y)), 0);
-            //
-            //if (scene.has_changed)
-            //    accumulator[x + y * SCRWIDTH] = p;
-            //else
-            //    accumulator[x + y * SCRWIDTH] += p;
-            //
-            //screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&(accumulator[x + y * SCRWIDTH] / float(frames)));
+        //    float4 p = float4(Trace(camera.GetPrimaryRay(sample_x, sample_y)), 0);
+        //    
+        //    if (scene.has_changed)
+        //        accumulator[x + y * SCRWIDTH] = p;
+        //    else
+        //        accumulator[x + y * SCRWIDTH] += p;
+        //    
+        //    screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&(accumulator[x + y * SCRWIDTH] / float(frames)));
             Ray r = camera.GetPrimaryRay(x, y);
 
             bvh.intersect_bvh(voxel_objects, r, 0);
@@ -437,7 +441,7 @@ void Renderer::Tick(float deltaTime)
     printf("%5.2fms (%.1ffps) - %.1fMrays/s\n", avg, fps, rps / 1000);
     // handle user input
     if (camera.HandleInput(deltaTime))
-        scene.has_changed = true;
+        scene.has_changed = false;
 
     frames++;
 }
