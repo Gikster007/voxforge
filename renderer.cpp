@@ -30,14 +30,16 @@ void Renderer::Init()
     voxel_objects[0].model.inv = voxel_objects[0].model.mat.Inverted();
     voxel_objects[0].populate_grid();
 
-    /*for (int i = 1; i < N; i++)
+    for (int i = 1; i < N; i++)
     {
         voxel_objects[i].model.translation = pos * float3(i * 20.0f, 0.0f, 0.0f);
         voxel_objects[i].model.rotation = float3(0.0f, 0.0f, 0.0f);
+        voxel_objects[i].model.mat = voxel_objects[0].model.matrix();
+        voxel_objects[i].model.inv = voxel_objects[0].model.mat.Inverted();
         voxel_objects[i].min = 0.0f;
         voxel_objects[i].max = 1.0f;
         voxel_objects[i].populate_grid();
-    }*/
+    }
 
     /*for (int z = 0; z < N / 3; z++)
     {

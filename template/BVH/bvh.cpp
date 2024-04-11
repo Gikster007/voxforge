@@ -177,7 +177,7 @@ float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 b
 
 bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 {
-#if 1
+#if 0
     // if ray is not inside the world: advance until it is
     state.t = 0;
     AABB aabb = AABB(0.0f, 1.0f);
@@ -228,7 +228,7 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 
 void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
 {   
-    #if 1
+    #if 0
     // Save Initial Ray
     Ray initial_ray = ray;
 
@@ -270,37 +270,13 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
         }
         if (s.tmax.x < s.tmax.y)
         {
-            if (s.tmax.x < s.tmax.z)
-            {
-                s.t = s.tmax.x, s.X += s.step.x;
-                if (s.X >= box.size)
-                    break;
-                s.tmax.x += s.tdelta.x;
-            }
-            else
-            {
-                s.t = s.tmax.z, s.Z += s.step.z;
-                if (s.Z >= box.size)
-                    break;
-                s.tmax.z += s.tdelta.z;
-            }
+            if (s.tmax.x < s.tmax.z){s.t = s.tmax.x, s.X += s.step.x; if (s.X >= box.size) break; s.tmax.x += s.tdelta.x;}
+            else {s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= box.size) break; s.tmax.z += s.tdelta.z;}
         }
         else
         {
-            if (s.tmax.y < s.tmax.z)
-            {
-                s.t = s.tmax.y, s.Y += s.step.y;
-                if (s.Y >= box.size)
-                    break;
-                s.tmax.y += s.tdelta.y;
-            }
-            else
-            {
-                s.t = s.tmax.z, s.Z += s.step.z;
-                if (s.Z >= box.size)
-                    break;
-                s.tmax.z += s.tdelta.z;
-            }
+            if (s.tmax.y < s.tmax.z){s.t = s.tmax.y, s.Y += s.step.y; if (s.Y >= box.size) break; s.tmax.y += s.tdelta.y;}
+            else{s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= box.size) break; s.tmax.z += s.tdelta.z;}
         }
     }
     // Restore the original ray's transform
@@ -322,7 +298,8 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
         #if !AMD_CPU
             const uint cell = box.grids[layer - 1][morton_encode(s.X, s.Y, s.Z)];
         #else
-            const uint cell = box.grids[layer - 1][s.X + s.Y * grid_size + s.Z * grid_size * grid_size];
+            int ix = s.X + s.Y * grid_size + s.Z * grid_size * grid_size;
+            const uint cell = box.grids[layer - 1][ix];
         #endif
        
         if (cell)
@@ -591,21 +568,23 @@ void VoxelVolume::populate_grid()
                     // voxel_data[voxel_index].color.z = scene->palette.color[voxel_index].b / 255.0f;
                 }
 
-                /*for (size_t i = 0; i < GRIDLAYERS; i++)
+                for (size_t i = 0; i < GRIDLAYERS; i++)
                 {
                     uint8_t b = (1 << i);
 #if !AMD_CPU
                     grids[i][morton_encode(floor(x / b), floor(y / b), floor(z / b))] = 1;
 #else
-                    grids[i][(x / b) + (y / b) * (GRIDSIZE / b) + (z / b) * (GRIDSIZE / b) * (GRIDSIZE / b)] = voxel_index == 0 ? 0 : 1;
-#endif
-                }*/
+                    int ix = (y / b) + (z / b) * (GRIDSIZE / b) + (x / b) * (GRIDSIZE / b) * (GRIDSIZE / b);
 
-#if !AMD_CPU
-                grid[morton_encode(floor(y / b), floor(z / b), floor(x / b))] = voxel_index == 0 ? 0 : 1;
-#else
-                grid[(x * model->size_y * model->size_x) + (z * model->size_x) + y] = voxel_index == 0 ? 0 : 1;
+                    grids[i][ix] = voxel_index == 0 ? 0 : 1;
 #endif
+                }
+
+//#if !AMD_CPU
+//                grid[morton_encode(floor(y / b), floor(z / b), floor(x / b))] = voxel_index == 0 ? 0 : 1;
+//#else
+//                grid[(x * model->size_y * model->size_x) + (z * model->size_x) + y] = voxel_index == 0 ? 0 : 1;
+//#endif
             }
         }
     }

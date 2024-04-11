@@ -16,7 +16,7 @@
 #define AMD_CPU 1
 
 #define WORLDSIZE2	(WORLDSIZE*WORLDSIZE)
-#define GRIDLAYERS 4
+#define GRIDLAYERS  3
 #ifdef TWOLEVEL
 // feel free to replace with whatever suits your two-level implementation,
 // should you chose this challenge.

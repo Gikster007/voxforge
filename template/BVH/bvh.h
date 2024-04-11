@@ -57,7 +57,7 @@ struct alignas(32) VoxelVolume
 
         /* Inspired by : <https://zeux.io/2010/10/17/aabb-from-obb-with-component-wise-abs/> */
         /* Get the transformed center and extent */
-        const float3 t_center = TransformPosition(s * 0.5f, mat);
+        const float3 t_center = TransformPosition(extent, mat);
         const float3 t_extent = TransformVector(extent, fabs(mat));
 
         return AABB(t_center - t_extent, t_center + t_extent);
