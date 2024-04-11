@@ -27,18 +27,18 @@ void calculate_bounds(BVHNode& node, VoxelVolume* voxel_objects, uint* indices)
 void BVH::construct_bvh(VoxelVolume* voxel_objects)
 {
     // Create Index Array
-    indices = new uint[N];
-    for (int i = 0; i < N /*N * N * N*/; i++)
+    indices = new uint[VOXELVOLUMES];
+    for (int i = 0; i < VOXELVOLUMES /*N * N * N*/; i++)
         indices[i] = i;
 
     // Allocate BVH Root Node
-    pool = new BVHNode[/*(N * N * N)*/ N * 2];
+    pool = new BVHNode[/*(N * N * N)*/ VOXELVOLUMES * 2];
     root = &pool[0];
     pool_ptr = 2;
 
     // Subdivide Root Node
     root->left_first = 0;
-    root->count = N /*N * N * N*/;
+    root->count = VOXELVOLUMES /*N * N * N*/;
     calculate_bounds(*root, voxel_objects, indices);
     subdivide(voxel_objects, *root, 0);
 }
@@ -133,7 +133,7 @@ void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_id
     }
 }
 
-#if AMD_CPU
+#if !AMD_CPU
 float BVH::intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax)
 {
     float tx1 = (bmin.x - ray.O.x) * ray.rD.x, tx2 = (bmax.x - ray.O.x) * ray.rD.x;
@@ -213,15 +213,15 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 
     // setup amanatides & woo - assume world is 1x1x1, from (0,0,0) to (1,1,1)
     const float inv = 1.0f / state.scale;
-    const int gridSize = GRIDSIZE * inv;
+    const int gridSize = static_cast<int>(GRIDSIZE * inv);
     const float cellSize = 1.0f / gridSize;
     state.step = make_int3(1 - ray.Dsign * 2);
-    const float3 posInGrid = gridSize * (ray.O + (state.t + 0.00005f) * ray.D);
+    const float3 posInGrid = static_cast<float>(box.size) * (ray.O + (state.t + 0.00005f) * ray.D);
     const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
     const int3 P = clamp(make_int3(posInGrid), 0, gridSize - 1);
     state.X = P.x, state.Y = P.y, state.Z = P.z;
     state.tdelta = (cellSize * float3(state.step) * ray.rD);
-    state.tmax = ((gridPlanes - ray.O) * ray.rD);
+    state.tmax = (gridPlanes - ray.O) * ray.rD;
     return true;
 #endif
 }
@@ -285,21 +285,39 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
     ray.rD = initial_ray.rD;
     ray.Dsign = initial_ray.Dsign;
     #else
+    // Save Initial Ray
+    Ray initial_ray = ray;
+
+    mat4 model_mat = box.model.mat;
+    mat4 inv_model_mat = box.model.inv;
+
+    // Transform the Ray
+    ray.O = TransformPosition(ray.O, inv_model_mat);
+    ray.D = TransformVector(ray.D, inv_model_mat);
+    ray.rD = float3(1.0f / ray.D.x, 1.0f / ray.D.y, 1.0f / ray.D.z);
+    ray.CalculateDsign();
+
     // setup Amanatides & Woo grid traversal
     DDAState s;
     s.scale = (1 << (layer - 1));
     if (!setup_3ddda(ray, s, box))
+    {
+        ray.O = initial_ray.O;
+        ray.D = initial_ray.D;
+        ray.rD = initial_ray.rD;
+        ray.Dsign = initial_ray.Dsign;
         return;
+    }
 
-    const int grid_size = GRIDSIZE / s.scale;
-    while (1)
+    const uint grid_size = GRIDSIZE / s.scale;
+    while (s.t <= ray.t)
     {
         ray.steps++;
         #if !AMD_CPU
-            const uint cell = box.grids[layer - 1][morton_encode(s.X, s.Y, s.Z)];
+            const uint8_t cell = box.grids[layer - 1][morton_encode(s.X, s.Y, s.Z)];
         #else
             int ix = s.X + s.Y * grid_size + s.Z * grid_size * grid_size;
-            const uint cell = box.grids[layer - 1][ix];
+            const uint8_t cell = box.grids[layer - 1][ix];
         #endif
        
         if (cell)
@@ -317,15 +335,27 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
                 ray.steps += new_ray.steps;
             }
             else
+            {
                 ray.voxel = cell;
+                // If the Ray Intersected With a Primitive Within The BVH
+                // Correct the Normal Based on The Transformation
+                ray.N = normalize(TransformVector(ray.N, model_mat));
+            }
 
             break;
         }
-        if (s.tmax.x < s.tmax.y){ if (s.tmax.x < s.tmax.z) { s.t = s.tmax.x, s.X += s.step.x; if (s.X >= grid_size) break; s.tmax.x += s.tdelta.x; }
+        if (s.tmax.x < s.tmax.y)
+        { 
+            if (s.tmax.x < s.tmax.z) { s.t = s.tmax.x, s.X += s.step.x; if (s.X >= grid_size) break; s.tmax.x += s.tdelta.x; }
             else { s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= grid_size) break; s.tmax.z += s.tdelta.z; }}
         else { if (s.tmax.y < s.tmax.z) { s.t = s.tmax.y, s.Y += s.step.y; if (s.Y >= grid_size) break; s.tmax.y += s.tdelta.y; }
             else { s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= grid_size) break; s.tmax.z += s.tdelta.z;}}
     }
+    // Restore the original ray's transform
+    ray.O = initial_ray.O;
+    ray.D = initial_ray.D;
+    ray.rD = initial_ray.rD;
+    ray.Dsign = initial_ray.Dsign;
     #endif
 }
 
@@ -499,7 +529,7 @@ void BVH::subdivide(VoxelVolume* voxel_objects, BVHNode& node, int id)
         }
     }
 
-    const int left_count = i - node.left_first;
+    const uint left_count = i - node.left_first;
     if (left_count == 0 || left_count == node.count)
         return;
 
@@ -535,30 +565,30 @@ void VoxelVolume::populate_grid()
     delete[] buffer; /* Cleanup */
 
     /* Grab the first model in the scene */
-    auto model = scene->models[0];
-    printf("loaded model of size : %i, %i, %i\n", model->size_x, model->size_y, model->size_z);
+    auto v_model = scene->models[0];
+    printf("loaded model of size : %i, %i, %i\n", v_model->size_x, v_model->size_y, v_model->size_z);
 
-    size = model->size_x;
-    auto grid_size = model->size_x * model->size_y * model->size_z * sizeof(uint8_t);
-    grid = (uint8_t*)MALLOC64(grid_size);
-    memset(grid, 0, grid_size);
+    size = v_model->size_x;
+    //auto grid_size = v_model->size_x * v_model->size_y * v_model->size_z * sizeof(uint8_t);
+    //grid = (uint8_t*)MALLOC64(grid_size);
+    //memset(grid, 0, grid_size);
 
     for (size_t i = 0; i < GRIDLAYERS; i++)
     {
         uint8_t b = 1 << i;
-        int grid_size = pow((GRIDSIZE / b), 3) * sizeof(uint8_t);
+        int grid_size = static_cast<int>(pow((GRIDSIZE / b), 3) * sizeof(uint8_t));
         grids[i] = (uint8_t*)MALLOC64(grid_size);
         memset(grids[i], 0, grid_size);
     }
 
 #pragma omp parallel for schedule(dynamic)
-    for (int z = 0; z < model->size_z; z++)
+    for (int z = 0; z < (int)v_model->size_z; z++)
     {
-        for (int y = 0; y < model->size_y; y++)
+        for (int y = 0; y < (int)v_model->size_y; y++)
         {
-            for (int x = 0; x < model->size_x; x++)
+            for (int x = 0; x < (int)v_model->size_x; x++)
             {
-                const uint8_t voxel_index = model->voxel_data[(z * model->size_y * model->size_x) + ((model->size_y - y - 1) * model->size_x) + x];
+                const uint8_t voxel_index = v_model->voxel_data[(z * v_model->size_y * v_model->size_x) + ((v_model->size_y - y - 1) * v_model->size_x) + x];
 
                 if (voxel_index != 0)
                 {

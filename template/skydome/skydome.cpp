@@ -19,8 +19,8 @@ float3 Skydome::render(const Ray& ray) const
     float3 dir = normalize(ray.D);
 
     // Sample Sky
-    uint u = (uint)width * atan2f(dir.z, dir.x) * INV2PI - 0.5f;
-    uint v = (uint)height * acosf(dir.y) * INVPI - 0.5f;
+    uint u = static_cast<uint>(width * atan2f(dir.z, dir.x) * INV2PI - 0.5f);
+    uint v = static_cast<uint>(height * acosf(dir.y) * INVPI - 0.5f);
     uint sky_idx = (u + v * width) % (width * height);
     return 0.65f * float3(pixels[sky_idx * 3], pixels[sky_idx * 3 + 1], pixels[sky_idx * 3 + 2]);
 }

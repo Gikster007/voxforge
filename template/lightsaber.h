@@ -6,5 +6,5 @@ class Lightsaber
 {
   public:
     Lightsaber() = default;
-    Lightsaber(uint8_t** grids, VoxelData* voxel_data);
+    Lightsaber(uint8_t** , VoxelData* );
 };

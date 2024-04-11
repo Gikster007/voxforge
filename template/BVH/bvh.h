@@ -1,6 +1,6 @@
 #pragma once
 
-constexpr int N = 1; // Amount of Voxel Models in the game
+constexpr int VOXELVOLUMES = 1; // Amount of Voxel Models in the game
 constexpr int NOISESIZE = 128;
 
 struct alignas(32) AABB
@@ -8,6 +8,11 @@ struct alignas(32) AABB
     float3 min = 1e34f;
     float3 max = -1e34f;
 
+  private:
+    float dummy1;
+    float dummy2;
+
+  public:
     AABB() = default;
     AABB(float3 _min, float3 _max)
     {
@@ -35,7 +40,7 @@ struct alignas(32) AABB
     }
 };
 
-struct alignas(32) VoxelVolume
+struct alignas(64) VoxelVolume
 {
     uint8_t* grid;
     uint8_t* grids[GRIDLAYERS];
@@ -100,7 +105,7 @@ class BVH
 
   private:
     float intersect_voxel_volume(Ray& ray, VoxelVolume& box);
-#if AMD_CPU
+#if !AMD_CPU
     float intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax);
 #else
     float intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 bmax4);
@@ -119,6 +124,4 @@ class BVH
     BVHNode* root = nullptr;
     uint pool_ptr = 0;
     uint nodes_used = 2;
-    
-    //Box* voxel_objects = nullptr;
 };

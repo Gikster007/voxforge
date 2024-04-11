@@ -8,7 +8,7 @@
 #include "lightsaber.h"
 
 
-Lightsaber::Lightsaber(uint8_t** grids, VoxelData* voxel_data)
+Lightsaber::Lightsaber(uint8_t** , VoxelData* )
 {
     ///* Load the model file */
     //FILE* file = fopen("assets/lightsaber.vox", "rb");

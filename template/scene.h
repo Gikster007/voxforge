@@ -63,7 +63,7 @@ class Ray
 {
 public:
 	Ray() = default;
-	Ray( const float3 origin, const float3 direction, const float rayLength = 1e34f, const int rgb = 0 )
+	Ray( const float3 origin, const float3 direction, const float rayLength = 1e34f, const uint8_t rgb = 0 )
 		: O( origin ), D( direction ), t( rayLength ), voxel( rgb )
 	{
 		// calculate reciprocal ray direction for triangles and AABBs
@@ -81,7 +81,7 @@ public:
 	float3 IntersectionPoint() const { return O + t * D; }
 	float3 GetNormal() const;
     float3 GetAlbedo(VoxelData* voxel_data) const;
-    float2 GetUV() const;
+    float2 GetUV();
 	void CalculateDsign() 
 	{
         uint xsign = *(uint*)&D.x >> 31;
@@ -94,7 +94,7 @@ public:
 	float GetRefractivity( const float3& I ) const; // TODO: implement
 	float3 GetAbsorption( const float3& I ) const; // TODO: implement
 	// ray data
-#if AMD_CPU
+#if !AMD_CPU
     float3 O;				 // ray origin
     float3 rD;				 // reciprocal ray direction
     float3 D = float3(0.0f); // ray direction

@@ -1,5 +1,8 @@
 #include "precomp.h"
 
+#define WHITE = float4(1.0f);
+#define BLACK = float4(0.0f);
+
 // -----------------------------------------------------------
 // Initialize the renderer
 // -----------------------------------------------------------
@@ -18,7 +21,7 @@ void Renderer::Init()
         fclose(f);
     }
 
-    voxel_objects = new VoxelVolume[N];
+    voxel_objects = new VoxelVolume[VOXELVOLUMES];
     //voxel_objects = (VoxelVolume*)MALLOC64( N * N * N * (sizeof(VoxelVolume)) );
     //memset(voxel_objects, 0, N * N * N * sizeof(VoxelVolume));
 
@@ -30,7 +33,7 @@ void Renderer::Init()
     voxel_objects[0].model.inv = voxel_objects[0].model.mat.Inverted();
     voxel_objects[0].populate_grid();
 
-    for (int i = 1; i < N; i++)
+    for (int i = 1; i < VOXELVOLUMES; i++)
     {
         voxel_objects[i].model.translation = pos * float3(i * 20.0f, 0.0f, 0.0f);
         voxel_objects[i].model.rotation = float3(0.0f, 0.0f, 0.0f);
@@ -183,7 +186,7 @@ float3 Renderer::Trace(Ray& ray)
 
     float3 I = ray.O + (ray.t - 0.00001f) * ray.D;
     const float3 L = normalize(float3(1, 4, 0.5f));
-    float3 N = ray.GetNormal();
+    float3 Normal = ray.GetNormal();
     float3 albedo = /*ray.GetAlbedo(scene.voxel_data)*/ float3(1.0f);
     
     float3 final_color = /*albedo;*/ 0.0f;
@@ -218,7 +221,7 @@ float3 Renderer::Trace(Ray& ray)
         case LightType::POINT:
             {
                 float3 s_ray_dir = normalize(lights[i].pos - I);
-                float angle = dot(N, s_ray_dir);
+                float angle = dot(Normal, s_ray_dir);
 
                 if (angle <= 0)
                     continue;
@@ -238,7 +241,7 @@ float3 Renderer::Trace(Ray& ray)
             break;
         case LightType::DIRECTIONAL: 
             {
-                float angle = dot(N, normalize(-lights[i].dir));
+                float angle = dot(Normal, normalize(-lights[i].dir));
 
                 if (angle <= 0)
                     continue;
@@ -257,7 +260,7 @@ float3 Renderer::Trace(Ray& ray)
                 float3 spot_dir = normalize(lights[i].dir);
                 float3 s_ray_dir = normalize(lights[i].pos - I);
 
-                float a = dot(N, s_ray_dir);
+                float a = dot(Normal, s_ray_dir);
                 if (a <= 0)
                     continue;
 
@@ -280,7 +283,7 @@ float3 Renderer::Trace(Ray& ray)
                  //float3 spot_dir = lights[i].dir;
                  //float3 s_ray_dir = lights[i].pos - I;
                 
-                 //float a = dot(N, normalize(s_ray_dir));
+                 //float a = dot(Normal, normalize(s_ray_dir));
                 
                  //if (a <= 0)
                  //    continue;
@@ -310,7 +313,7 @@ float3 Renderer::Trace(Ray& ray)
                 float3 new_pos = lights[i].pos + float3(x, y, z);
 
                 float3 s_ray_dir = normalize(new_pos - I);
-                float angle = dot(N, s_ray_dir);
+                float angle = dot(Normal, s_ray_dir);
                 float dist = length(new_pos - I);
                 float falloff = max(1 / (dist * dist) - 0.25f, 0.0f);
 
@@ -334,7 +337,7 @@ float3 Renderer::Trace(Ray& ray)
                 float3 new_pos = lerp(point_a, point_b, randomised_f);
 
                 float3 s_ray_dir = normalize(new_pos - I);
-                float angle = dot(N, s_ray_dir);
+                float angle = dot(Normal, s_ray_dir);
                 float dist = length(new_pos - I);
                 float falloff = max(1 / (dist * dist) - 0.25f, 0.0f);
 
@@ -354,11 +357,11 @@ float3 Renderer::Trace(Ray& ray)
 
     // Reflections (Source: https://jacco.ompf2.com/2022/05/27/how-to-build-a-bvh-part-8-whitted-style/)
     float3 dir = normalize(ray.D);
-    float3 sec_D = dir - 2 * N * dot(N, dir);
-    float3 sec_O = I + N * 0.001f;
+    float3 sec_D = dir - 2 * Normal * dot(Normal, dir);
+    float3 sec_O = I + Normal * 0.001f;
 
     uint random_val = RandomUInt();
-    sec_D += diffusereflection(N, random_val) * roughness;
+    sec_D += diffusereflection(Normal, random_val) * roughness;
 
     Ray secondary = Ray(sec_O, normalize(sec_D));
     secondary.depth = ray.depth + 1;
@@ -371,11 +374,11 @@ float3 Renderer::Trace(Ray& ray)
     /* visualize normal */   // return (N + 1) * 0.5f;
     /* visualize distance */ // return float3( 1 / (1 + ray.t) );
     /* visualize albedo */ 
-    if (ray.t < lightsaber_t)
+    /*if (ray.t < lightsaber_t)
     {
         return final_color;
     }
-    return final_color * (1.0f - intensity) + lightsaber_cont;
+    return final_color * (1.0f - intensity) + lightsaber_cont;*/
 }
 
 // -----------------------------------------------------------
@@ -389,6 +392,8 @@ void Renderer::Tick(float deltaTime)
     {
         frames = 1;
     }
+
+    //float4 color = 0.0f;
 
     // pixel loop
     Timer t;
@@ -415,19 +420,26 @@ void Renderer::Tick(float deltaTime)
         //        accumulator[x + y * SCRWIDTH] += p;
         //    
         //    screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&(accumulator[x + y * SCRWIDTH] / float(frames)));
-            Ray r = camera.GetPrimaryRay(x, y);
+            Ray r = camera.GetPrimaryRay(static_cast<float>(x), static_cast<float>(y));
 
             bvh.intersect_bvh(voxel_objects, r, 0);
 
             if (/*r.t < 1e34f*/ r.voxel != 0)
             {
+                //color = float4(1.0f, 1.0f, 1.0f, 0.0f);
                 screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(1.0f, 1.0f, 1.0f, 0.0f));
             }
             else
-                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(/*r.steps / 16.0f, */0.0f));
+            {
+                //color = float4(/*r.steps / 16.0f, */ 0.0f);
+                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(/*r.steps / 16.0f, */ 0.0f));
+            }
 
             if (grid_view)
-                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(r.steps / 16.0f, 0.0f));
+            {
+                //color = float4(r.steps / 32.0f, 0.0f);
+                screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8(&float4(r.steps / 32.0f, 0.0f));
+            }
         }
     }
 

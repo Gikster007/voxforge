@@ -1,8 +1,6 @@
 #include "precomp.h"
 #include <stb_image.h>
 
-static float3 uint_to_rgb(uint value);
-
 float3 Ray::GetNormal() const
 {
 
@@ -27,13 +25,13 @@ float3 Ray::GetAlbedo(VoxelData* voxel_data) const
     return voxel_data[voxel].color;
 }
 
-float2 Ray::GetUV() const // Source: Milan
+float2 Ray::GetUV() // Source: Milan
 {
-    float3 N = GetNormal();
-    float3 I = O + t * D;
+    float3 Normal = GetNormal();
+    I = IntersectionPoint();
 
     float u = 0.0f, v = 0.0f;
-    if (N.y != 0)
+    if (Normal.y != 0)
     {
         float xSteps = I.x * WORLDSIZE;
         float zSteps = I.z * WORLDSIZE;
@@ -41,7 +39,7 @@ float2 Ray::GetUV() const // Source: Milan
         u = xSteps - floor(xSteps);
         v = zSteps - floor(zSteps);
     }
-    else if (N.z != 0)
+    else if (Normal.z != 0)
     {
         float xSteps = I.x * WORLDSIZE;
         float ySteps = I.y * WORLDSIZE;
@@ -50,7 +48,7 @@ float2 Ray::GetUV() const // Source: Milan
         v = ySteps - floor(ySteps);
         v = 1 - v;
     }
-    else if (N.x != 0)
+    else if (Normal.x != 0)
     {
         float zSteps = I.z * WORLDSIZE;
         float ySteps = I.y * WORLDSIZE;
@@ -99,17 +97,17 @@ bool Cube::Contains(const float3& pos) const
 
 Scene::Scene()
 {
-    int x, y, channels;
-    uint8_t* texture = stbi_load("assets/blue.png", &x, &y, &channels, 0);
+    /*int x, y, channels;
+    uint8_t* texture = stbi_load("assets/blue.png", &x, &y, &channels, 0);*/
 
-    for (int i = 0; i < 256; i++)
+    /*for (int i = 0; i < 256; i++)
     {
         voxel_data[i].color = uint_to_rgb(RandomUInt());
         voxel_data[i].texture.data = texture;
         voxel_data[i].texture.width = x;
         voxel_data[i].texture.height = y;
         voxel_data[i].texture.channels = channels;
-    }
+    }*/
 
     // the voxel world sits in a 1x1x1 cube
     cube = Cube(float3(0, 0, 0), float3(1, 1, 1));
@@ -121,7 +119,7 @@ Scene::Scene()
     for (size_t i = 0; i < GRIDLAYERS; i++)
     {
         uint8_t b = 1 << i;
-        int grid_size = pow((GRIDSIZE / b), 3) * sizeof(uint8_t);
+        int grid_size = static_cast<int>(pow((GRIDSIZE / b), 3) * sizeof(uint8_t));
         grids[i] = (uint8_t*)MALLOC64(grid_size);
         memset(grids[i], 0, grid_size);
     }
@@ -157,14 +155,6 @@ Scene::Scene()
     }
 }
 
-static float3 uint_to_rgb(uint value)
-{
-    uint r = (value >> 16) & 255;
-    uint g = (value >> 8) & 255;
-    uint b = value & 255;
-    return float3(r, g, b) / 256.0f;
-}
-
 void Scene::Set(const uint x, const uint y, const uint z, const uint8_t v)
 {
     grid[x + y * GRIDSIZE + z * GRIDSIZE2] = v;
@@ -183,10 +173,10 @@ bool Scene::Setup3DDDA(const Ray& ray, DDAState& state) const
 
     // setup amanatides & woo - assume world is 1x1x1, from (0,0,0) to (1,1,1)
     const float inv = 1.0f / state.scale;
-    const int gridSize = GRIDSIZE * inv;
+    const int gridSize = GRIDSIZE * static_cast<int>(inv);
     const float cellSize = 1.0f / gridSize;
     state.step = make_int3(1 - ray.Dsign * 2);
-    const float3 posInGrid = gridSize * (ray.O + (state.t + 0.00005f) * ray.D);
+    const float3 posInGrid = static_cast<float>(gridSize) * (ray.O + (state.t + 0.00005f) * ray.D);
     const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
     const int3 P = clamp(make_int3(posInGrid), 0, gridSize - 1);
     state.X = P.x, state.Y = P.y, state.Z = P.z;
@@ -203,14 +193,14 @@ void Scene::FindNearest(Ray& ray, const int layer) const
     if (!Setup3DDDA(ray, s))
         return;
 
-    const int grid_size = GRIDSIZE / s.scale;
+    const uint grid_size = GRIDSIZE / s.scale;
     while (1)
     {
         ray.steps++;
         #if !AMD_CPU
-            const uint cell = grids[layer - 1][morton_encode(s.X, s.Y, s.Z)];
+            const uint8_t cell = grids[layer - 1][morton_encode(s.X, s.Y, s.Z)];
         #else
-            const uint cell = grids[layer - 1][s.X + s.Y * grid_size + s.Z * grid_size * grid_size];
+            const uint8_t cell = grids[layer - 1][s.X + s.Y * grid_size + s.Z * grid_size * grid_size];
         #endif
        
         if (cell)
@@ -244,7 +234,7 @@ bool Scene::IsOccluded(const Ray& ray, const int layer) const
     // setup Amanatides & Woo grid traversal
     DDAState s, bs;
     s.scale = (1 << (layer - 1));
-    const int grid_size = GRIDSIZE / s.scale;
+    const uint grid_size = GRIDSIZE / s.scale;
     if (!Setup3DDDA(ray, s))
         return false;
 
