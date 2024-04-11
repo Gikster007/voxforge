@@ -133,7 +133,7 @@ void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_id
     }
 }
 
-#if !AMD_CPU
+#if AMD_CPU
 float BVH::intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax)
 {
     float tx1 = (bmin.x - ray.O.x) * ray.rD.x, tx2 = (bmax.x - ray.O.x) * ray.rD.x;

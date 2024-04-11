@@ -105,7 +105,7 @@ class BVH
 
   private:
     float intersect_voxel_volume(Ray& ray, VoxelVolume& box);
-#if !AMD_CPU
+#if AMD_CPU
     float intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax);
 #else
     float intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 bmax4);

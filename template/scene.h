@@ -94,7 +94,7 @@ public:
 	float GetRefractivity( const float3& I ) const; // TODO: implement
 	float3 GetAbsorption( const float3& I ) const; // TODO: implement
 	// ray data
-#if !AMD_CPU
+#if AMD_CPU
     float3 O;				 // ray origin
     float3 rD;				 // reciprocal ray direction
     float3 D = float3(0.0f); // ray direction
