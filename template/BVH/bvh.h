@@ -42,11 +42,12 @@ struct alignas(32) AABB
 
 struct alignas(64) VoxelVolume
 {
-    uint8_t* grid;
+    //uint8_t* grid;
     uint8_t* grids[GRIDLAYERS];
     int size;
     Transform model;
     float3 min = 1e34f, max = -1e34f;
+
     bool contains(const float3& pos) const
     {
         // test if pos is inside the cube
@@ -67,6 +68,7 @@ struct alignas(64) VoxelVolume
 
         return AABB(t_center - t_extent, t_center + t_extent);
     }
+    ~VoxelVolume();
 };
 
 struct BVHNode
@@ -99,24 +101,26 @@ struct BVHNode
 class BVH
 {
   public:
+    BVH() = default;
+    ~BVH();
     void construct_bvh(VoxelVolume* voxel_objects);
 
-    void intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx);
+    void intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx) const;
 
   private:
-    float intersect_voxel_volume(Ray& ray, VoxelVolume& box);
+    float intersect_voxel_volume(Ray& ray, const VoxelVolume& box) const;
 #if AMD_CPU
-    float intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax);
+    float intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax) const;
 #else
     float intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 bmax4);
 #endif
 
-    bool setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box);
-    void find_nearest(Ray& ray, VoxelVolume& box, const int layer);
+    bool setup_3ddda(const Ray& ray, DDAState& state, const VoxelVolume& box) const;
+    void find_nearest(Ray& ray, const VoxelVolume& box, const int layer) const;
 
-    float find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int& axis, float& pos) const;
+    float find_best_split_plane(const VoxelVolume* voxel_objects, const BVHNode& node, int& axis, float& pos) const;
 
-    void subdivide(VoxelVolume* voxel_objects, BVHNode& node, int id);
+    void subdivide(VoxelVolume* voxel_objects, BVHNode& node, const int id);
 
   private:
     uint* indices = nullptr;

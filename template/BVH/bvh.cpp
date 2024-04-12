@@ -5,7 +5,7 @@
 #define OGT_VOX_IMPLEMENTATION
 #include "lib/ogt_vox.h"
 
-void calculate_bounds(BVHNode& node, VoxelVolume* voxel_objects, uint* indices)
+void calculate_bounds(BVHNode& node, VoxelVolume* voxel_objects, const uint* indices)
 {
     node.min = float3(1e34f);
     node.max = float3(-1e34f);
@@ -23,27 +23,26 @@ void calculate_bounds(BVHNode& node, VoxelVolume* voxel_objects, uint* indices)
         node.max.z = fmaxf(node.max.z, aabb.max.z);
     }
 }
-
 void BVH::construct_bvh(VoxelVolume* voxel_objects)
 {
     // Create Index Array
     indices = new uint[VOXELVOLUMES];
-    for (int i = 0; i < VOXELVOLUMES /*N * N * N*/; i++)
+    for (int i = 0; i < VOXELVOLUMES; i++)
         indices[i] = i;
 
     // Allocate BVH Root Node
-    pool = new BVHNode[/*(N * N * N)*/ VOXELVOLUMES * 2];
+    pool = new BVHNode[VOXELVOLUMES * 2];
     root = &pool[0];
     pool_ptr = 2;
 
     // Subdivide Root Node
     root->left_first = 0;
-    root->count = VOXELVOLUMES /*N * N * N*/;
+    root->count = VOXELVOLUMES;
     calculate_bounds(*root, voxel_objects, indices);
     subdivide(voxel_objects, *root, 0);
 }
 
-float BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
+float BVH::intersect_voxel_volume(Ray& ray, const VoxelVolume& box) const
 {
     float tmin = 0.0f, tmax = 1e34f;
     AABB aabb = box.get_aabb();
@@ -69,7 +68,7 @@ float BVH::intersect_voxel_volume(Ray& ray, VoxelVolume& box)
     // ray.t = tmin;
 }
 
-void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx)
+void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_idx) const
 {
     BVHNode *node = &pool[node_idx], *stack[64];
     uint stack_ptr = 0;
@@ -134,7 +133,7 @@ void BVH::intersect_bvh(VoxelVolume* voxel_objects, Ray& ray, const uint node_id
 }
 
 #if AMD_CPU
-float BVH::intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax)
+float BVH::intersect_aabb(const Ray& ray, const float3 bmin, const float3 bmax) const
 {
     float tx1 = (bmin.x - ray.O.x) * ray.rD.x, tx2 = (bmax.x - ray.O.x) * ray.rD.x;
     float tmin = min(tx1, tx2), tmax = max(tx1, tx2);
@@ -175,7 +174,7 @@ float BVH::intersect_aabb_sse(const Ray& ray, const __m128 bmin4, const __m128 b
 }
 #endif
 
-bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
+bool BVH::setup_3ddda(const Ray& ray, DDAState& state, const VoxelVolume& box) const
 {
 #if 0
     // if ray is not inside the world: advance until it is
@@ -201,7 +200,6 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
     // proceed with traversal
     return true;
 #else
-    // if ray is not inside the world: advance until it is
     state.t = 0;
     AABB aabb = AABB(0.0f, 1.0f);
     if (!box.contains(ray.O))
@@ -213,20 +211,20 @@ bool BVH::setup_3ddda(const Ray& ray, DDAState& state, VoxelVolume& box)
 
     // setup amanatides & woo - assume world is 1x1x1, from (0,0,0) to (1,1,1)
     const float inv = 1.0f / state.scale;
-    const int gridSize = static_cast<int>(GRIDSIZE * inv);
+    const int gridSize = GRIDSIZE * inv;
     const float cellSize = 1.0f / gridSize;
     state.step = make_int3(1 - ray.Dsign * 2);
-    const float3 posInGrid = static_cast<float>(box.size) * (ray.O + (state.t + 0.00005f) * ray.D);
+    const float3 posInGrid = gridSize * (ray.O + (state.t + 0.00005f) * ray.D);
     const float3 gridPlanes = (ceilf(posInGrid) - ray.Dsign) * cellSize;
     const int3 P = clamp(make_int3(posInGrid), 0, gridSize - 1);
     state.X = P.x, state.Y = P.y, state.Z = P.z;
     state.tdelta = (cellSize * float3(state.step) * ray.rD);
-    state.tmax = (gridPlanes - ray.O) * ray.rD;
+    state.tmax = ((gridPlanes - ray.O) * ray.rD);
     return true;
 #endif
 }
 
-void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
+void BVH::find_nearest(Ray& ray, const VoxelVolume& box, const int layer) const
 {   
     #if 0
     // Save Initial Ray
@@ -285,27 +283,11 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
     ray.rD = initial_ray.rD;
     ray.Dsign = initial_ray.Dsign;
     #else
-    // Save Initial Ray
-    Ray initial_ray = ray;
-
-    mat4 model_mat = box.model.mat;
-    mat4 inv_model_mat = box.model.inv;
-
-    // Transform the Ray
-    ray.O = TransformPosition(ray.O, inv_model_mat);
-    ray.D = TransformVector(ray.D, inv_model_mat);
-    ray.rD = float3(1.0f / ray.D.x, 1.0f / ray.D.y, 1.0f / ray.D.z);
-    ray.CalculateDsign();
-
     // setup Amanatides & Woo grid traversal
     DDAState s;
     s.scale = (1 << (layer - 1));
     if (!setup_3ddda(ray, s, box))
     {
-        ray.O = initial_ray.O;
-        ray.D = initial_ray.D;
-        ray.rD = initial_ray.rD;
-        ray.Dsign = initial_ray.Dsign;
         return;
     }
 
@@ -316,7 +298,7 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
         #if !AMD_CPU
             const uint8_t cell = box.grids[layer - 1][morton_encode(s.X, s.Y, s.Z)];
         #else
-            int ix = s.X + s.Y * grid_size + s.Z * grid_size * grid_size;
+            const int ix = s.X + s.Y * grid_size + s.Z * grid_size * grid_size;
             const uint8_t cell = box.grids[layer - 1][ix];
         #endif
        
@@ -335,12 +317,7 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
                 ray.steps += new_ray.steps;
             }
             else
-            {
                 ray.voxel = cell;
-                // If the Ray Intersected With a Primitive Within The BVH
-                // Correct the Normal Based on The Transformation
-                ray.N = normalize(TransformVector(ray.N, model_mat));
-            }
 
             break;
         }
@@ -351,15 +328,10 @@ void BVH::find_nearest(Ray& ray, VoxelVolume& box, const int layer)
         else { if (s.tmax.y < s.tmax.z) { s.t = s.tmax.y, s.Y += s.step.y; if (s.Y >= grid_size) break; s.tmax.y += s.tdelta.y; }
             else { s.t = s.tmax.z, s.Z += s.step.z; if (s.Z >= grid_size) break; s.tmax.z += s.tdelta.z;}}
     }
-    // Restore the original ray's transform
-    ray.O = initial_ray.O;
-    ray.D = initial_ray.D;
-    ray.rD = initial_ray.rD;
-    ray.Dsign = initial_ray.Dsign;
     #endif
 }
 
-float evaluate_sah(VoxelVolume* voxel_objects, BVHNode& node, int axis, float pos)
+float evaluate_sah(const VoxelVolume* voxel_objects, const BVHNode& node, int axis, float pos)
 {
     AABB l_aabb, r_aabb;
     int l_cnt = 0, r_cnt = 0;
@@ -392,7 +364,7 @@ struct Bin
     uint count = 0;
 };
 
-float BVH::find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int& axis, float& pos) const
+float BVH::find_best_split_plane(const VoxelVolume* voxel_objects, const BVHNode& node, int& axis, float& pos) const
 {
     float best_cost = 1e34f;
 #if SAH_FULL_SWEEP
@@ -497,7 +469,7 @@ float BVH::find_best_split_plane(VoxelVolume* voxel_objects, BVHNode& node, int&
     return best_cost;
 }
 
-void BVH::subdivide(VoxelVolume* voxel_objects, BVHNode& node, int id)
+void BVH::subdivide(VoxelVolume* voxel_objects, BVHNode& node, const int id)
 {
     /*if (node.count <= 2u)
         return;*/
@@ -618,4 +590,20 @@ void VoxelVolume::populate_grid()
             }
         }
     }
+}
+
+VoxelVolume::~VoxelVolume()
+{
+    for (int i = 0; i < GRIDLAYERS; i++)
+    {
+        _aligned_free(grids[i]);
+    }
+    _aligned_free(grids);
+}
+
+BVH::~BVH()
+{
+    delete indices;
+    delete pool;
+    delete root;
 }
